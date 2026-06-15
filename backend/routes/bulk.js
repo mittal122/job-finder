@@ -82,6 +82,7 @@ router.post('/send', async (req, res) => {
     total: items.length,
     sent: 0,
     failed: 0,
+    stopped: false,
     results: items.map(it => ({
       email: it.email,
       company: it.company || extractCompany(it.email),
@@ -95,9 +96,21 @@ router.post('/send', async (req, res) => {
   };
   sessions.set(sessionId, session);
 
+  // Sleeps in 500ms chunks so stop requests are noticed quickly
+  async function pauseable(ms) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (session.stopped) return true;           // true = was interrupted
+      await sleep(Math.min(500, end - Date.now()));
+    }
+    return false;
+  }
+
   // Background sending
   (async () => {
     for (let i = 0; i < items.length; i++) {
+      if (session.stopped) break;
+
       const it = items[i];
       const row = session.results[i];
       try {
@@ -121,25 +134,38 @@ router.post('/send', async (req, res) => {
           const breakMs = Math.round(breakMinutes * 60 * 1000);
           const breakUntil = new Date(Date.now() + breakMs).toISOString();
           const batchNum = Math.floor((i + 1) / batchSize);
-          console.log(`[bulk-send] Batch ${batchNum} done — pausing ${breakMinutes}m before next batch`);
+          console.log(`[bulk-send] Batch ${batchNum} done — pausing ${breakMinutes}m`);
           broadcast(session, { type: 'break', batchNum, breakMs, breakUntil, sent: session.sent, failed: session.failed, total: session.total });
-          await sleep(breakMs);
+          const interrupted = await pauseable(breakMs);
+          if (interrupted) break;
           broadcast(session, { type: 'break-done' });
         } else {
-          await sleep(delaySeconds * 1000);
+          const interrupted = await pauseable(delaySeconds * 1000);
+          if (interrupted) break;
         }
       }
     }
 
-    session.status = 'done';
-    broadcast(session, { type: 'done', sent: session.sent, failed: session.failed, total: session.total });
-    console.log(`[bulk-send] Complete — sent: ${session.sent}, failed: ${session.failed}`);
+    session.status = session.stopped ? 'stopped' : 'done';
+    const eventType = session.stopped ? 'stopped' : 'done';
+    broadcast(session, { type: eventType, sent: session.sent, failed: session.failed, total: session.total });
+    console.log(`[bulk-send] ${session.status} — sent: ${session.sent}, failed: ${session.failed}`);
 
     if (resumePath) fs.unlink(resumePath, () => {});
     setTimeout(() => sessions.delete(sessionId), 3600000);
   })();
 
   res.json({ sessionId });
+});
+
+// POST /api/bulk/stop/:sessionId — stop a running session
+router.post('/stop/:sessionId', (req, res) => {
+  const session = sessions.get(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'running') return res.json({ ok: true, status: session.status });
+  session.stopped = true;
+  console.log(`[bulk-send] Stop requested for session ${req.params.sessionId}`);
+  res.json({ ok: true });
 });
 
 // GET /api/bulk/progress/:sessionId — SSE
@@ -155,7 +181,7 @@ router.get('/progress/:sessionId', (req, res) => {
 
   res.write(`data: ${JSON.stringify({ type: 'init', results: session.results, sent: session.sent, failed: session.failed, total: session.total, status: session.status })}\n\n`);
 
-  if (session.status === 'done') { res.end(); return; }
+  if (session.status === 'done' || session.status === 'stopped') { res.end(); return; }
 
   session.clients.add(res);
   const hb = setInterval(() => { try { res.write(': hb\n\n'); } catch { clearInterval(hb); } }, 15000);
