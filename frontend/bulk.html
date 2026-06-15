@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Send — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ── Steps indicator ─────────────────────────────────────────────── */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 28px;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .step-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; flex-shrink: 0;
+    }
+    .step.active .step-num  { background: var(--primary); color: #fff; }
+    .step.active            { color: var(--text); }
+    .step.done .step-num    { background: #27ae60; color: #fff; }
+    .step-line { flex: 1; height: 1px; background: var(--border); margin: 0 12px; min-width: 32px; }
+
+    /* ── Two-column compose layout ───────────────────────────────────── */
+    .compose-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 720px) { .compose-grid { grid-template-columns: 1fr; } }
+
+    .big-textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--input-bg, #111);
+      color: var(--text);
+      box-sizing: border-box;
+    }
+    .big-textarea:focus { outline: none; border-color: var(--primary); }
+
+    /* ── Stats bar ───────────────────────────────────────────────────── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .stat-card .stat-num  { font-size: 28px; font-weight: 700; line-height: 1; }
+    .stat-card .stat-lbl  { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+    .stat-card.s-total    { border-color: var(--primary); }
+    .stat-card.s-sent     { border-color: #27ae60; }
+    .stat-card.s-failed   { border-color: #e74c3c; }
+    .stat-card.s-pending  { border-color: #f39c12; }
+    .stat-card.s-total .stat-num   { color: var(--primary); }
+    .stat-card.s-sent .stat-num    { color: #27ae60; }
+    .stat-card.s-failed .stat-num  { color: #e74c3c; }
+    .stat-card.s-pending .stat-num { color: #f39c12; }
+
+    /* ── Progress bar ────────────────────────────────────────────────── */
+    .progress-bar-wrap { background: var(--border); border-radius: 99px; height: 8px; margin-bottom: 20px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 99px; background: var(--primary); transition: width .4s; width: 0%; }
+
+    /* ── Preview cards ───────────────────────────────────────────────── */
+    .preview-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .preview-card.status-sent   { border-left: 4px solid #27ae60; }
+    .preview-card.status-failed { border-left: 4px solid #e74c3c; }
+    .preview-card.status-pending{ border-left: 4px solid #f39c12; }
+    .preview-card.status-ready  { border-left: 4px solid var(--primary); }
+    .preview-card.status-error  { border-left: 4px solid #e74c3c; }
+
+    .preview-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .preview-email  { font-weight: 600; font-size: 14px; flex: 1; }
+    .company-badge  {
+      font-size: 11px; padding: 2px 8px; border-radius: 99px;
+      background: var(--primary-dim, #2a2d5e); color: var(--primary);
+      font-weight: 600; letter-spacing: .3px;
+    }
+    .status-pill {
+      font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600;
+    }
+    .status-pill.sent    { background: #1a3d2a; color: #27ae60; }
+    .status-pill.failed  { background: #3d1a1a; color: #e74c3c; }
+    .status-pill.pending { background: #3d2e0a; color: #f39c12; }
+    .status-pill.ready   { background: var(--primary-dim, #2a2d5e); color: var(--primary); }
+    .status-pill.error   { background: #3d1a1a; color: #e74c3c; }
+
+    .preview-field { margin-bottom: 8px; }
+    .preview-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .preview-input {
+      width: 100%; padding: 8px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--input-bg, #111);
+      color: var(--text); font-size: 13px; box-sizing: border-box;
+    }
+    .preview-input:focus { outline: none; border-color: var(--primary); }
+    .preview-body {
+      width: 100%; min-height: 120px; resize: vertical;
+      padding: 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--input-bg, #111);
+      color: var(--text); font-size: 13px; line-height: 1.55;
+      font-family: monospace; box-sizing: border-box;
+    }
+    .preview-body:focus { outline: none; border-color: var(--primary); }
+    .error-msg { font-size: 12px; color: #e74c3c; margin-top: 6px; }
+
+    /* ── Toggle collapse ─────────────────────────────────────────────── */
+    .collapsible-header {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .collapsible-header .chevron { transition: transform .2s; font-size: 12px; }
+    .collapsed .chevron { transform: rotate(-90deg); }
+    .collapsible-body { transition: none; }
+    .collapsible-body.hidden { display: none; }
+
+    /* ── Section ─────────────────────────────────────────────────────── */
+    .section-hidden { display: none; }
+    .generate-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page" style="max-width:900px">
+
+      <!-- Steps -->
+      <div class="steps">
+        <div class="step active" id="step1-indicator">
+          <div class="step-num">1</div> Compose
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step2-indicator">
+          <div class="step-num">2</div> Preview & Edit
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step3-indicator">
+          <div class="step-num">3</div> Send
+        </div>
+      </div>
+
+      <div id="global-msg"></div>
+
+      <!-- ═══ STEP 1: COMPOSE ══════════════════════════════════════════ -->
+      <div id="step1-section">
+        <div class="card mb-24">
+          <div class="collapsible-header" onclick="toggleCollapse('compose-body','compose-card')">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Compose</h3>
+            <span class="chevron">▾</span>
+          </div>
+          <div class="collapsible-body" id="compose-body">
+            <div style="margin-top:16px">
+              <!-- Subject line -->
+              <div class="form-group mb-16">
+                <label class="form-label">Email Subject Template *</label>
+                <input id="subject-input" class="input" type="text"
+                       placeholder="Application for Software Engineer | Mittal Domaidya">
+                <div class="form-hint">Company name will be personalized per recipient.</div>
+              </div>
+
+              <div class="compose-grid">
+                <div>
+                  <label class="form-label">HR Email Addresses *</label>
+                  <textarea id="emails-input" class="big-textarea"
+                    placeholder="One email per line (or comma-separated):&#10;&#10;hr@google.com&#10;careers@microsoft.com&#10;jobs@amazon.com"></textarea>
+                  <div class="form-hint mt-4" id="email-count-hint">Paste emails above — one per line or comma-separated.</div>
+                </div>
+                <div>
+                  <label class="form-label">Email Body Template *</label>
+                  <textarea id="template-input" class="big-textarea"
+                    placeholder="Dear Hiring Manager,&#10;&#10;I am writing to express my interest in the Software Engineer position at [Company Name].&#10;&#10;..."></textarea>
+                  <div class="form-hint mt-4">AI will only replace company name references — everything else stays identical.</div>
+                </div>
+              </div>
+
+              <div class="generate-btn-row mt-16">
+                <button class="btn btn-primary btn-lg" onclick="startGenerate()" id="generate-btn">
+                  Generate Personalized Emails
+                </button>
+                <span id="gen-status" style="font-size:13px;color:var(--text-muted)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 2: PREVIEW ══════════════════════════════════════════ -->
+      <div id="step2-section" class="section-hidden">
+        <div class="card mb-24">
+          <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Preview & Edit <span id="preview-count" style="color:var(--text-muted);font-weight:400"></span></h3>
+            <div class="flex gap-8">
+              <button class="btn btn-ghost btn-sm" onclick="expandAll()">Expand All</button>
+              <button class="btn btn-ghost btn-sm" onclick="collapseAll()">Collapse All</button>
+            </div>
+          </div>
+
+          <!-- Send Settings -->
+          <div style="background:var(--input-bg,#111);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px">Send Settings</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Delay between emails</label>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input id="ss-delay" type="number" min="1" max="300" value="10" class="input" style="width:70px;text-align:center">
+                  <span style="font-size:12px;color:var(--text-muted)">seconds</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Emails per batch</label>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input id="ss-batch" type="number" min="1" max="500" value="10" class="input" style="width:70px;text-align:center">
+                  <span style="font-size:12px;color:var(--text-muted)">emails</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Break between batches</label>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input id="ss-break" type="number" min="0" max="60" value="2" step="0.5" class="input" style="width:70px;text-align:center">
+                  <span style="font-size:12px;color:var(--text-muted)">minutes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resume upload -->
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--input-bg,#111);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;flex-wrap:wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--primary)"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;margin-bottom:2px">Attach Resume <span style="color:var(--text-muted);font-weight:400">(optional)</span></div>
+              <div style="font-size:12px;color:var(--text-muted)">PDF will be attached to every email sent.</div>
+            </div>
+            <label style="cursor:pointer">
+              <input type="file" id="resume-file" accept=".pdf,.doc,.docx" style="display:none" onchange="onResumeSelected(this)">
+              <span class="btn btn-ghost btn-sm" onclick="document.getElementById('resume-file').click()">Choose File</span>
+            </label>
+            <span id="resume-name" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+          </div>
+
+          <div id="preview-list"></div>
+
+          <div style="margin-top:16px;display:flex;justify-content:flex-end">
+            <button class="btn btn-primary btn-lg" onclick="startSend()" id="send-btn">Send All Emails</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 3: PROGRESS ════════════════════════════════════════ -->
+      <div id="step3-section" class="section-hidden">
+        <div class="card mb-24">
+          <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Sending Progress</h3>
+            <span id="send-status-label" style="font-size:13px;color:var(--text-muted)"></span>
+          </div>
+          <!-- Break banner -->
+          <div id="break-banner" style="display:none;align-items:center;gap:12px;padding:12px 16px;background:#2a2200;border:1px solid #f39c12;border-radius:8px;margin-bottom:16px">
+            <span style="font-size:18px">☕</span>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:#f39c12" id="break-title">Taking a break…</div>
+              <div style="font-size:12px;color:#a07a20;margin-top:2px" id="break-sub">Resuming soon</div>
+            </div>
+            <div style="font-size:22px;font-weight:700;color:#f39c12;font-variant-numeric:tabular-nums" id="break-countdown">—</div>
+          </div>
+
+          <div class="stats-bar">
+            <div class="stat-card s-total">
+              <div class="stat-num" id="stat-total">0</div>
+              <div class="stat-lbl">Total</div>
+            </div>
+            <div class="stat-card s-sent">
+              <div class="stat-num" id="stat-sent">0</div>
+              <div class="stat-lbl">Sent</div>
+            </div>
+            <div class="stat-card s-failed">
+              <div class="stat-num" id="stat-failed">0</div>
+              <div class="stat-lbl">Failed</div>
+            </div>
+            <div class="stat-card s-pending">
+              <div class="stat-num" id="stat-pending">0</div>
+              <div class="stat-lbl">Pending</div>
+            </div>
+          </div>
+
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);text-align:left">
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">#</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Recipient</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Company</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Status</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Time</th>
+              </tr>
+            </thead>
+            <tbody id="progress-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Bulk Send');
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let generatedItems = [];   // [{ email, company, subject, body, status, error }]
+
+// ── Step helpers ──────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1, 2, 3].forEach(i => {
+    const ind = qs(`#step${i}-indicator`);
+    ind.classList.remove('active', 'done');
+    if (i < n) ind.classList.add('done');
+    else if (i === n) ind.classList.add('active');
+  });
+}
+
+// ── Email parsing ─────────────────────────────────────────────────────────────
+function parseEmails(raw) {
+  return raw.split(/[\n,]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e && e.includes('@') && e.includes('.'));
+}
+
+qs('#emails-input').addEventListener('input', () => {
+  const emails = parseEmails(qs('#emails-input').value);
+  qs('#email-count-hint').textContent = emails.length ? `${emails.length} email${emails.length > 1 ? 's' : ''} detected.` : 'Paste emails above — one per line or comma-separated.';
+});
+
+// ── Collapse ──────────────────────────────────────────────────────────────────
+function toggleCollapse(bodyId, cardId) {
+  const body = qs('#' + bodyId);
+  const header = body.previousElementSibling;
+  body.classList.toggle('hidden');
+  header.classList.toggle('collapsed');
+}
+function expandAll()   { qsa('.preview-body-wrap').forEach(el => { el.classList.remove('hidden'); el.previousElementSibling.classList.remove('collapsed'); }); }
+function collapseAll() { qsa('.preview-body-wrap').forEach(el => { el.classList.add('hidden'); el.previousElementSibling.classList.add('collapsed'); }); }
+
+// ── STEP 1 → Generate ─────────────────────────────────────────────────────────
+async function startGenerate() {
+  const emails = parseEmails(qs('#emails-input').value);
+  const template = qs('#template-input').value.trim();
+  const subject  = qs('#subject-input').value.trim();
+
+  if (!emails.length) { showAlert(qs('#global-msg'), 'error', 'Please enter at least one HR email address.'); return; }
+  if (!template)      { showAlert(qs('#global-msg'), 'error', 'Please enter your email template.'); return; }
+  if (!subject)       { showAlert(qs('#global-msg'), 'error', 'Please enter a subject line.'); return; }
+
+  qs('#global-msg').innerHTML = '';
+  const btn = qs('#generate-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  qs('#gen-status').textContent = `Processing ${emails.length} email${emails.length > 1 ? 's' : ''} — this may take a moment…`;
+
+  try {
+    const results = await apiFetch('/bulk/generate', {
+      method: 'POST',
+      body: JSON.stringify({ emails, subject, template }),
+    });
+    generatedItems = results;
+    renderPreview(results);
+    setStep(2);
+    qs('#step2-section').classList.remove('section-hidden');
+    qs('#step2-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Collapse compose section
+    const body = qs('#compose-body');
+    if (!body.classList.contains('hidden')) {
+      body.classList.add('hidden');
+      body.previousElementSibling.classList.add('collapsed');
+    }
+  } catch (err) {
+    showAlert(qs('#global-msg'), 'error', 'Generation failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Regenerate';
+    qs('#gen-status').textContent = '';
+  }
+}
+
+// ── Render preview cards ──────────────────────────────────────────────────────
+function renderPreview(items) {
+  const ready  = items.filter(i => i.status === 'ready').length;
+  const errors = items.filter(i => i.status === 'error').length;
+  qs('#preview-count').textContent = `— ${ready} ready${errors ? `, ${errors} failed` : ''}`;
+
+  qs('#preview-list').innerHTML = items.map((it, idx) => `
+    <div class="preview-card status-${it.status}" id="pcard-${idx}">
+      <div class="collapsible-header" onclick="toggleCardBody(${idx})">
+        <div class="preview-header" style="margin:0;flex:1">
+          <span class="preview-email">${escHtml(it.email)}</span>
+          <span class="company-badge">${escHtml(it.company)}</span>
+          <span class="status-pill ${it.status}">${it.status}</span>
+        </div>
+        <span class="chevron" id="chevron-${idx}" style="margin-left:12px">▾</span>
+      </div>
+      <div class="preview-body-wrap" id="pbody-${idx}" style="margin-top:12px">
+        ${it.status === 'error' ? `<div class="error-msg">AI Error: ${escHtml(it.error)}<br><small style="color:var(--text-muted)">Template used as fallback — you can edit below before sending.</small></div>` : ''}
+        <div class="preview-field">
+          <div class="preview-label">Subject</div>
+          <input class="preview-input" type="text" id="subj-${idx}" value="${escHtml(it.subject)}">
+        </div>
+        <div class="preview-field">
+          <div class="preview-label">Body</div>
+          <textarea class="preview-body" id="body-${idx}" rows="8">${escHtml(it.body)}</textarea>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleCardBody(idx) {
+  const body = qs(`#pbody-${idx}`);
+  const chevron = qs(`#chevron-${idx}`);
+  body.classList.toggle('hidden');
+  chevron.style.transform = body.classList.contains('hidden') ? 'rotate(-90deg)' : '';
+}
+
+// ── Resume file handler ───────────────────────────────────────────────────────
+function onResumeSelected(input) {
+  const file = input.files[0];
+  qs('#resume-name').textContent = file ? file.name : 'No file chosen';
+  qs('#resume-name').style.color = file ? 'var(--primary)' : 'var(--text-muted)';
+}
+
+// ── STEP 2 → Send ─────────────────────────────────────────────────────────────
+async function startSend() {
+  // Collect edited values from preview cards
+  const items = generatedItems.map((it, idx) => ({
+    email:   it.email,
+    company: it.company,
+    subject: qs(`#subj-${idx}`)?.value || it.subject,
+    body:    qs(`#body-${idx}`)?.value || it.body,
+  }));
+
+  qs('#send-btn').disabled = true;
+  qs('#send-btn').textContent = 'Sending…';
+
+  try {
+    // Use FormData so we can include the resume file
+    const formData = new FormData();
+    formData.append('items', JSON.stringify(items));
+    formData.append('delaySeconds', qs('#ss-delay').value  || '10');
+    formData.append('batchSize',    qs('#ss-batch').value  || '10');
+    formData.append('breakMinutes', qs('#ss-break').value  || '2');
+    const resumeFile = qs('#resume-file')?.files[0];
+    if (resumeFile) formData.append('resume', resumeFile);
+
+    const res = await fetch('/api/bulk/send', { method: 'POST', body: formData });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+    const { sessionId } = await res.json();
+
+    // Show step 3
+    setStep(3);
+    qs('#step3-section').classList.remove('section-hidden');
+    qs('#step3-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Init progress table
+    initProgressTable(items);
+    updateStats(items.length, 0, 0);
+
+    // Connect SSE
+    connectProgress(sessionId, items.length);
+  } catch (err) {
+    showAlert(qs('#global-msg'), 'error', 'Send failed: ' + err.message);
+    qs('#send-btn').disabled = false;
+    qs('#send-btn').textContent = 'Send All Emails';
+  }
+}
+
+// ── Progress UI ───────────────────────────────────────────────────────────────
+function initProgressTable(items) {
+  qs('#progress-table-body').innerHTML = items.map((it, i) => `
+    <tr id="prow-${i}" style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;color:var(--text-muted)">${i + 1}</td>
+      <td style="padding:8px 10px">${escHtml(it.email)}</td>
+      <td style="padding:8px 10px"><span class="company-badge">${escHtml(it.company)}</span></td>
+      <td style="padding:8px 10px" id="pstatus-${i}"><span class="status-pill pending">pending</span></td>
+      <td style="padding:8px 10px;color:var(--text-muted);font-size:12px" id="ptime-${i}">—</td>
+    </tr>
+  `).join('');
+}
+
+function updateStats(total, sent, failed) {
+  const pending = total - sent - failed;
+  qs('#stat-total').textContent   = total;
+  qs('#stat-sent').textContent    = sent;
+  qs('#stat-failed').textContent  = failed;
+  qs('#stat-pending').textContent = pending;
+  const pct = total > 0 ? Math.round(((sent + failed) / total) * 100) : 0;
+  qs('#progress-fill').style.width = pct + '%';
+}
+
+function updateRow(index, row) {
+  const statusCell = qs(`#pstatus-${index}`);
+  const timeCell   = qs(`#ptime-${index}`);
+  if (!statusCell) return;
+
+  const pillClass = row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'pending';
+  statusCell.innerHTML = `<span class="status-pill ${pillClass}">${row.status}</span>${row.error ? `<div class="error-msg" style="font-size:11px;margin-top:2px">${escHtml(row.error)}</div>` : ''}`;
+  timeCell.textContent = row.sentAt ? new Date(row.sentAt).toLocaleTimeString() : '—';
+
+  // Update preview card border too
+  const pcard = qs(`#pcard-${index}`);
+  if (pcard) {
+    pcard.className = `preview-card status-${row.status}`;
+    const pill = pcard.querySelector('.status-pill');
+    if (pill) { pill.className = `status-pill ${row.status}`; pill.textContent = row.status; }
+  }
+}
+
+let breakTimer = null;
+
+function connectProgress(sessionId, total) {
+  const es = new EventSource(`/api/bulk/progress/${sessionId}`);
+
+  es.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'init') {
+      data.results.forEach((row, i) => updateRow(i, row));
+      updateStats(data.total, data.sent, data.failed);
+      if (data.status === 'done') finishSend(data, es);
+    }
+
+    if (data.type === 'update') {
+      updateRow(data.index, data.row);
+      updateStats(data.total, data.sent, data.failed);
+      qs('#send-status-label').textContent = `${data.sent + data.failed} / ${data.total} processed…`;
+    }
+
+    if (data.type === 'break') {
+      startBreakBanner(data);
+    }
+
+    if (data.type === 'break-done') {
+      stopBreakBanner();
+    }
+
+    if (data.type === 'done') {
+      stopBreakBanner();
+      finishSend(data, es);
+    }
+  };
+
+  es.onerror = () => { es.close(); };
+}
+
+function startBreakBanner(data) {
+  const banner = qs('#break-banner');
+  banner.style.display = 'flex';
+  qs('#break-title').textContent = `Batch ${data.batchNum} done — taking a break`;
+  const until = new Date(data.breakUntil);
+  if (breakTimer) clearInterval(breakTimer);
+  breakTimer = setInterval(() => {
+    const sec = Math.max(0, Math.round((until - Date.now()) / 1000));
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    qs('#break-countdown').textContent = `${m}:${s}`;
+    qs('#break-sub').textContent = sec > 0 ? `Resuming in ${m}:${s}` : 'Resuming…';
+    if (sec === 0) stopBreakBanner();
+  }, 500);
+}
+
+function stopBreakBanner() {
+  if (breakTimer) { clearInterval(breakTimer); breakTimer = null; }
+  const banner = qs('#break-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+function finishSend(data, es) {
+  es.close();
+  stopBreakBanner();
+  qs('#send-status-label').textContent = `Complete — ${data.sent} sent, ${data.failed} failed.`;
+  qs('#send-btn').textContent = 'Send Complete';
+  qs('#progress-fill').style.background = data.failed === 0 ? '#27ae60' : 'var(--primary)';
+}
+</script>
+</body>
+</html>

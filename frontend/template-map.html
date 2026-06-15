@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Template Mapping — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ── Steps ─────────────────────────────────────── */
+    .steps { display:flex;align-items:center;margin-bottom:28px; }
+    .step { display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted);font-weight:500; }
+    .step-num { width:26px;height:26px;border-radius:50%;background:var(--border);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0; }
+    .step.active .step-num { background:var(--primary);color:#fff; }
+    .step.done .step-num   { background:#27ae60;color:#fff; }
+    .step.active           { color:var(--text); }
+    .step-line { flex:1;height:1px;background:var(--border);margin:0 12px;min-width:24px; }
+
+    /* ── Drop zone ──────────────────────────────────── */
+    .drop-zone {
+      border:2px dashed var(--border);border-radius:10px;padding:32px 20px;
+      text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+    }
+    .drop-zone:hover,.drop-zone.dragover { border-color:var(--primary);background:rgba(92,110,248,.05); }
+    .drop-zone .dz-icon { font-size:32px;margin-bottom:8px; }
+    .drop-zone .dz-title { font-size:14px;font-weight:600;margin-bottom:4px; }
+    .drop-zone .dz-sub   { font-size:12px;color:var(--text-muted); }
+
+    /* ── Column chips ───────────────────────────────── */
+    .col-chips { display:flex;flex-wrap:wrap;gap:6px;margin-top:12px; }
+    .col-chip  { padding:3px 10px;border-radius:99px;background:var(--primary-dim,#2a2d5e);color:var(--primary);font-size:12px;font-weight:500; }
+
+    /* ── Preview mini table ─────────────────────────── */
+    .mini-table { width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;overflow-x:auto;display:block; }
+    .mini-table th { padding:6px 10px;background:var(--card-bg);color:var(--text-muted);font-weight:500;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap; }
+    .mini-table td { padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis; }
+
+    /* ── Mapping table ──────────────────────────────── */
+    .map-table { width:100%;border-collapse:collapse;font-size:13px; }
+    .map-table th { padding:8px 12px;color:var(--text-muted);font-weight:500;text-align:left;border-bottom:1px solid var(--border); }
+    .map-table td { padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle; }
+    .map-table .ph-tag { font-family:monospace;background:var(--input-bg,#111);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--primary);font-size:12px; }
+    .map-select { padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg,#111);color:var(--text);font-size:13px;width:100%; }
+    .map-select:focus { outline:none;border-color:var(--primary); }
+    .sample-val { font-size:12px;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+
+    /* ── Template textareas ─────────────────────────── */
+    .tpl-textarea { width:100%;resize:vertical;font-family:monospace;font-size:13px;line-height:1.6;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg,#111);color:var(--text);box-sizing:border-box;min-height:320px; }
+    .tpl-textarea:focus { outline:none;border-color:var(--primary); }
+
+    /* ── Config bar ─────────────────────────────────── */
+    .config-bar { display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;background:var(--input-bg,#111);border:1px solid var(--border);border-radius:8px;margin-bottom:16px; }
+    .config-list { display:flex;flex-wrap:wrap;gap:6px; }
+    .config-chip { display:flex;align-items:center;gap:4px;padding:3px 8px 3px 10px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--card-bg); }
+    .config-chip button { border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 2px;line-height:1; }
+    .config-chip button:hover { color:#e74c3c; }
+
+    /* ── Preview cards ──────────────────────────────── */
+    .preview-card { background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px; }
+    .preview-card.status-ready   { border-left:4px solid var(--primary); }
+    .preview-card.status-error   { border-left:4px solid #e74c3c; }
+    .preview-card.status-sent    { border-left:4px solid #27ae60; }
+    .preview-card.status-failed  { border-left:4px solid #e74c3c; }
+    .status-pill { font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600; }
+    .status-pill.ready   { background:var(--primary-dim,#2a2d5e);color:var(--primary); }
+    .status-pill.error   { background:#3d1a1a;color:#e74c3c; }
+    .status-pill.sent    { background:#1a3d2a;color:#27ae60; }
+    .status-pill.failed  { background:#3d1a1a;color:#e74c3c; }
+    .status-pill.pending { background:#3d2e0a;color:#f39c12; }
+    .pv-header { display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none; }
+    .pv-sno { font-size:11px;color:var(--text-muted);flex-shrink:0; }
+    .pv-email { font-weight:600;font-size:13px;flex:1; }
+    .co-badge { font-size:11px;padding:2px 8px;border-radius:99px;background:var(--primary-dim,#2a2d5e);color:var(--primary);font-weight:600; }
+    .chevron { transition:transform .2s;color:var(--text-muted);font-size:11px; }
+    .pv-body-wrap { margin-top:12px; }
+    .pv-label { font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px; }
+    .pv-input { width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg,#111);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:8px; }
+    .pv-input:focus { outline:none;border-color:var(--primary); }
+    .pv-body-ta { width:100%;min-height:120px;resize:vertical;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg,#111);color:var(--text);font-size:13px;font-family:monospace;line-height:1.55;box-sizing:border-box; }
+    .pv-body-ta:focus { outline:none;border-color:var(--primary); }
+
+    /* ── Stats / progress ───────────────────────────── */
+    .stats-bar { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px; }
+    .stat-card { background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center; }
+    .stat-num  { font-size:28px;font-weight:700;line-height:1; }
+    .stat-lbl  { font-size:11px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px; }
+    .s-total  { border-color:var(--primary); } .s-total .stat-num  { color:var(--primary); }
+    .s-sent   { border-color:#27ae60; }         .s-sent .stat-num   { color:#27ae60; }
+    .s-failed { border-color:#e74c3c; }         .s-failed .stat-num { color:#e74c3c; }
+    .s-pend   { border-color:#f39c12; }         .s-pend .stat-num   { color:#f39c12; }
+    .prog-wrap { background:var(--border);border-radius:99px;height:8px;margin-bottom:20px;overflow:hidden; }
+    .prog-fill { height:100%;border-radius:99px;background:var(--primary);transition:width .4s;width:0%; }
+
+    /* ── Resume upload ──────────────────────────────── */
+    .resume-bar { display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--input-bg,#111);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;flex-wrap:wrap; }
+
+    /* ── Misc ───────────────────────────────────────── */
+    .section-hidden { display:none; }
+    .two-col { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
+    @media(max-width:720px) { .two-col { grid-template-columns:1fr; } .stats-bar { grid-template-columns:repeat(2,1fr); } }
+    .add-ph-row { display:flex;gap:8px;margin-top:12px; }
+    .save-name-row { display:flex;gap:8px;align-items:center; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page" style="max-width:980px">
+
+      <!-- Steps -->
+      <div class="steps">
+        <div class="step active" id="s1-ind"><div class="step-num">1</div> Setup</div>
+        <div class="step-line"></div>
+        <div class="step" id="s2-ind"><div class="step-num">2</div> Preview & Edit</div>
+        <div class="step-line"></div>
+        <div class="step" id="s3-ind"><div class="step-num">3</div> Send</div>
+      </div>
+
+      <div id="global-msg"></div>
+
+      <!-- ══════════════════════════════════════════════ STEP 1 ══ -->
+      <div id="s1-section">
+
+        <!-- Excel + Template side by side -->
+        <div class="two-col mb-24">
+
+          <!-- Excel Upload -->
+          <div class="card">
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Excel File</h3>
+            <div class="drop-zone" id="drop-zone"
+                 onclick="document.getElementById('excel-file').click()"
+                 ondragover="onDragOver(event)"
+                 ondragleave="onDragLeave(event)"
+                 ondrop="onDrop(event)">
+              <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="onFileChosen(this)">
+              <div class="dz-icon">📊</div>
+              <div class="dz-title">Drop Excel file here or click to browse</div>
+              <div class="dz-sub">Supports .xlsx · .xls · .csv</div>
+            </div>
+
+            <!-- After upload -->
+            <div id="excel-info" style="display:none;margin-top:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <span id="file-name-label" style="font-size:13px;font-weight:600"></span>
+                <span id="row-count-label" style="font-size:12px;color:var(--text-muted)"></span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Detected columns:</div>
+              <div class="col-chips" id="col-chips"></div>
+              <div style="margin-top:14px;overflow-x:auto">
+                <table class="mini-table" id="preview-table"></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Template -->
+          <div class="card">
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Email Template
+              <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">Use <code style="background:var(--input-bg);padding:1px 5px;border-radius:3px">{{Placeholder}}</code> for dynamic values</span>
+            </h3>
+            <div class="form-group">
+              <label class="form-label">Subject</label>
+              <input id="tpl-subject" class="input" type="text"
+                     value="Application for Opportunities at {{Company}}"
+                     oninput="onTemplateChange()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Body</label>
+              <textarea id="tpl-body" class="tpl-textarea" oninput="onTemplateChange()">Hi {{Name}},
+
+I hope you're doing well.
+
+My name is Mittal Domadiya, and I am currently pursuing B.Tech in Computer Science at CHARUSAT. I'm reaching out because I'm very interested in opportunities at {{Company}}.
+
+Unlike most students, I've focused heavily on building production-style cloud and DevOps systems. Some of my recent projects include:
+
+• An AI-powered GitOps & Auto-Remediation platform on AWS EKS that automated incident response and reduced MTTR by 80%.
+
+• A Multi-Region Active-Active Service Mesh using AWS, Istio, Envoy, and Vault to enable secure global failover and zero-trust communication.
+
+• An Autonomous Multi-Agent DevOps Swarm that automated code reviews, testing, and CI/CD workflows using LangGraph, Docker, GitHub Actions, and Gemini API.
+
+Through these projects, I've gained hands-on experience with AWS, Kubernetes, Docker, Terraform, ArgoCD, GitHub Actions, Linux, Prometheus, Grafana, and modern cloud-native architectures.
+
+I've attached my resume and would be grateful for an opportunity to discuss how my skills could contribute to your team. Even a brief 15-minute conversation would be greatly appreciated.
+
+GitHub: https://github.com/mittal122
+
+LinkedIn: https://www.linkedin.com/in/mittal-domadiya-412550310/
+
+Thank you for your time and consideration. I look forward to hearing from you.
+
+Best Regards,
+
+Mittal Domadiya
+
++91-7096827305
+
+mittaldomadiya44@gmail.com</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder Mapping -->
+        <div class="card mb-24">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Placeholder Mapping</h3>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost btn-sm" onclick="addPlaceholder()">+ Add Placeholder</button>
+              <button class="btn btn-ghost btn-sm" onclick="autoDetect()">Auto Detect from Template</button>
+            </div>
+          </div>
+
+          <table class="map-table" id="map-table">
+            <thead>
+              <tr>
+                <th style="width:160px">Placeholder</th>
+                <th>Maps to Column</th>
+                <th>Sample Value</th>
+                <th style="width:48px"></th>
+              </tr>
+            </thead>
+            <tbody id="map-body"></tbody>
+          </table>
+
+          <div class="add-ph-row" id="add-ph-row" style="display:none">
+            <input id="new-ph-input" class="input" style="max-width:200px" placeholder="e.g. Title" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_]/g,'')">
+            <button class="btn btn-ghost btn-sm" onclick="confirmAddPh()">Add</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelAddPh()">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Saved Configs -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Saved Configurations</h3>
+          <div class="config-bar">
+            <div class="save-name-row">
+              <input id="config-name-input" class="input" style="width:200px" placeholder="Config name…">
+              <button class="btn btn-ghost btn-sm" onclick="saveConfig()">Save Current</button>
+            </div>
+            <div class="config-list" id="config-list"></div>
+          </div>
+        </div>
+
+        <!-- Resume Upload -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Attach Resume <span style="color:var(--text-muted);font-weight:400;font-size:12px">(optional — sent with every email)</span></h3>
+          <div class="resume-bar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            <div style="flex:1">
+              <div style="font-size:13px;color:var(--text-muted)">PDF, DOC, or DOCX — will be attached to every outgoing email.</div>
+            </div>
+            <input type="file" id="resume-file" accept=".pdf,.doc,.docx" style="display:none" onchange="onResumeChosen(this)">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('resume-file').click()">Choose File</button>
+            <span id="resume-label" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+            <button id="resume-clear-btn" class="btn btn-ghost btn-sm" style="display:none;color:#e74c3c" onclick="clearResume()">Remove</button>
+          </div>
+        </div>
+
+        <!-- Send Settings -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Send Settings</h3>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+            <div>
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Delay between emails</label>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input id="ss-delay" type="number" min="1" max="300" value="10" class="input" style="width:70px;text-align:center">
+                <span style="font-size:12px;color:var(--text-muted)">seconds</span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Emails per batch</label>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input id="ss-batch" type="number" min="1" max="500" value="10" class="input" style="width:70px;text-align:center">
+                <span style="font-size:12px;color:var(--text-muted)">emails</span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Break between batches</label>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input id="ss-break" type="number" min="0" max="60" value="2" step="0.5" class="input" style="width:70px;text-align:center">
+                <span style="font-size:12px;color:var(--text-muted)">minutes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Generate button -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
+          <button class="btn btn-primary btn-lg" onclick="startGenerate()" id="gen-btn">
+            Generate Emails
+          </button>
+          <span id="gen-status" style="font-size:13px;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════ STEP 2 ══ -->
+      <div id="s2-section" class="section-hidden">
+        <div class="card mb-24">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Preview & Edit
+              <span id="pv-count" style="color:var(--text-muted);font-weight:400"></span>
+            </h3>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost btn-sm" onclick="expandAllPv()">Expand All</button>
+              <button class="btn btn-ghost btn-sm" onclick="collapseAllPv()">Collapse All</button>
+            </div>
+          </div>
+
+          <div id="pv-list"></div>
+
+          <div style="display:flex;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-primary btn-lg" onclick="startSend()" id="send-btn">Send All Emails</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════ STEP 3 ══ -->
+      <div id="s3-section" class="section-hidden">
+        <div class="card mb-24">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="font-size:14px;font-weight:600;margin:0">Sending Progress</h3>
+            <span id="send-lbl" style="font-size:13px;color:var(--text-muted)"></span>
+          </div>
+          <!-- Break banner -->
+          <div id="break-banner" style="display:none;align-items:center;gap:12px;padding:12px 16px;background:#2a2200;border:1px solid #f39c12;border-radius:8px;margin-bottom:16px">
+            <span style="font-size:18px">☕</span>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:#f39c12" id="break-title">Taking a break…</div>
+              <div style="font-size:12px;color:#a07a20;margin-top:2px" id="break-sub">Resuming soon</div>
+            </div>
+            <div style="font-size:22px;font-weight:700;color:#f39c12;font-variant-numeric:tabular-nums" id="break-countdown">—</div>
+          </div>
+
+          <div class="stats-bar">
+            <div class="stat-card s-total"><div class="stat-num" id="st-total">0</div><div class="stat-lbl">Total</div></div>
+            <div class="stat-card s-sent"><div class="stat-num" id="st-sent">0</div><div class="stat-lbl">Sent</div></div>
+            <div class="stat-card s-failed"><div class="stat-num" id="st-failed">0</div><div class="stat-lbl">Failed</div></div>
+            <div class="stat-card s-pend"><div class="stat-num" id="st-pend">0</div><div class="stat-lbl">Pending</div></div>
+          </div>
+          <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);text-align:left">
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">#</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Recipient</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Company</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Status</th>
+                <th style="padding:8px 10px;color:var(--text-muted);font-weight:500">Time</th>
+              </tr>
+            </thead>
+            <tbody id="prog-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Template Mapping');
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let excelColumns = [];
+let excelRows    = [];
+let mapping      = {};   // { Placeholder: ColumnName }
+let generated    = [];   // result items
+
+const DEFAULT_PLACEHOLDERS = ['Name', 'Company', 'Email', 'Title'];
+
+// ── Step indicator ────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    const el = qs(`#s${i}-ind`);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+}
+
+// ── Excel upload ──────────────────────────────────────────────────────────────
+function onDragOver(e)  { e.preventDefault(); qs('#drop-zone').classList.add('dragover'); }
+function onDragLeave()  { qs('#drop-zone').classList.remove('dragover'); }
+function onDrop(e)      { e.preventDefault(); onDragLeave(); const f = e.dataTransfer.files[0]; if (f) uploadExcel(f); }
+function onFileChosen(i){ const f = i.files[0]; if (f) uploadExcel(f); }
+
+async function uploadExcel(file) {
+  const dz = qs('#drop-zone');
+  dz.innerHTML = '<div class="dz-icon">⏳</div><div class="dz-title">Parsing…</div>';
+
+  const fd = new FormData();
+  fd.append('excel', file);
+
+  try {
+    const data = await fetch('/api/template-map/parse', { method:'POST', body: fd }).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+
+    excelColumns = data.columns;
+    excelRows    = data.rows;
+
+    // Update drop zone
+    dz.innerHTML = `
+      <div class="dz-icon">✅</div>
+      <div class="dz-title">${escHtml(file.name)}</div>
+      <div class="dz-sub">${data.total} rows · <span style="color:var(--primary);cursor:pointer" onclick="document.getElementById('excel-file').click()">Change file</span></div>`;
+
+    qs('#file-name-label').textContent = file.name;
+    qs('#row-count-label').textContent = `${data.total} rows`;
+
+    // Column chips
+    qs('#col-chips').innerHTML = excelColumns.map(c => `<span class="col-chip">${escHtml(c)}</span>`).join('');
+
+    // Preview table
+    const headers = excelColumns.map(c => `<th>${escHtml(c)}</th>`).join('');
+    const bodyRows = data.preview.map(row =>
+      `<tr>${excelColumns.map(c => `<td title="${escHtml(row[c]||'')}">${escHtml(row[c]||'')}</td>`).join('')}</tr>`
+    ).join('');
+    qs('#preview-table').innerHTML = `<thead><tr>${headers}</tr></thead><tbody>${bodyRows}</tbody>`;
+
+    qs('#excel-info').style.display = '';
+
+    // Auto-assign mapping columns
+    autoMatchColumns();
+    renderMapping();
+  } catch (err) {
+    dz.innerHTML = `<div class="dz-icon">❌</div><div class="dz-title">${escHtml(err.message)}</div><div class="dz-sub">Click to try again</div>`;
+  }
+}
+
+// ── Placeholder detection ─────────────────────────────────────────────────────
+function detectPlaceholders(text) {
+  const found = new Set();
+  const re = /\{\{([a-zA-Z0-9_]+)\}\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) found.add(m[1]);
+  return [...found];
+}
+
+function onTemplateChange() {
+  const subject = qs('#tpl-subject').value;
+  const body    = qs('#tpl-body').value;
+  const phs = detectPlaceholders(subject + '\n' + body);
+  // Add new ones to mapping; keep existing
+  phs.forEach(ph => { if (!(ph in mapping)) mapping[ph] = autoMatchColumn(ph); });
+  renderMapping();
+}
+
+function autoDetect() {
+  const subject = qs('#tpl-subject').value;
+  const body    = qs('#tpl-body').value;
+  const phs = detectPlaceholders(subject + '\n' + body);
+  if (!phs.length) { showAlert(qs('#global-msg'), 'error', 'No {{Placeholder}} tokens found in template.'); return; }
+  phs.forEach(ph => { if (!(ph in mapping)) mapping[ph] = autoMatchColumn(ph); });
+  renderMapping();
+}
+
+function autoMatchColumn(ph) {
+  // Try exact match (case-insensitive), then partial
+  const lower = ph.toLowerCase();
+  const exact = excelColumns.find(c => c.toLowerCase() === lower);
+  if (exact) return exact;
+  const partial = excelColumns.find(c => c.toLowerCase().includes(lower) || lower.includes(c.toLowerCase()));
+  return partial || (excelColumns[0] || '');
+}
+
+function autoMatchColumns() {
+  // Run for all existing placeholders after new Excel is uploaded
+  for (const ph of Object.keys(mapping)) {
+    mapping[ph] = autoMatchColumn(ph);
+  }
+}
+
+// ── Render mapping table ──────────────────────────────────────────────────────
+function renderMapping() {
+  const firstRow = excelRows[0] || {};
+  const opts = ['', ...excelColumns].map(c => `<option value="${escHtml(c)}">${escHtml(c || '— none —')}</option>`).join('');
+
+  qs('#map-body').innerHTML = Object.entries(mapping).map(([ph, col]) => {
+    const sample = col ? escHtml(firstRow[col] || '') : '—';
+    const selOpts = ['', ...excelColumns].map(c =>
+      `<option value="${escHtml(c)}" ${c === col ? 'selected' : ''}>${escHtml(c || '— none —')}</option>`
+    ).join('');
+    return `
+      <tr data-ph="${escHtml(ph)}">
+        <td><span class="ph-tag">{{${escHtml(ph)}}}</span></td>
+        <td><select class="map-select" onchange="onMapChange('${escHtml(ph)}',this.value)">${selOpts}</select></td>
+        <td><span class="sample-val" title="${sample}">${sample || '<span style=color:var(--text-muted)>no data</span>'}</span></td>
+        <td><button class="btn btn-ghost btn-sm" style="color:#e74c3c;padding:2px 8px" onclick="removePh('${escHtml(ph)}')">×</button></td>
+      </tr>`;
+  }).join('');
+}
+
+function onMapChange(ph, col) {
+  mapping[ph] = col;
+  // Refresh sample column
+  const firstRow = excelRows[0] || {};
+  const row = qs(`[data-ph="${ph}"]`);
+  if (row) {
+    const sampleEl = row.querySelector('.sample-val');
+    if (sampleEl) sampleEl.textContent = col ? (firstRow[col] || '') : '—';
+  }
+}
+
+function removePh(ph) { delete mapping[ph]; renderMapping(); }
+
+// ── Add placeholder ───────────────────────────────────────────────────────────
+function addPlaceholder() { qs('#add-ph-row').style.display = 'flex'; qs('#new-ph-input').focus(); }
+function cancelAddPh()    { qs('#add-ph-row').style.display = 'none'; qs('#new-ph-input').value = ''; }
+function confirmAddPh() {
+  const val = qs('#new-ph-input').value.trim();
+  if (!val) return;
+  mapping[val] = autoMatchColumn(val);
+  renderMapping();
+  cancelAddPh();
+}
+qs('#new-ph-input').addEventListener('keydown', e => { if (e.key === 'Enter') confirmAddPh(); if (e.key === 'Escape') cancelAddPh(); });
+
+// ── Saved configs ─────────────────────────────────────────────────────────────
+async function loadConfigs() {
+  try {
+    const configs = await apiFetch('/template-map/configs');
+    qs('#config-list').innerHTML = configs.length
+      ? configs.map(c => `
+          <div class="config-chip">
+            <span style="cursor:pointer" onclick="applyConfig(${c.id})">${escHtml(c.name)}</span>
+            <button onclick="deleteConfig(${c.id})" title="Delete">×</button>
+          </div>`).join('')
+      : '<span style="font-size:12px;color:var(--text-muted)">No saved configs yet.</span>';
+  } catch {}
+}
+
+async function saveConfig() {
+  const name = qs('#config-name-input').value.trim();
+  if (!name) { qs('#config-name-input').focus(); return; }
+  try {
+    await apiFetch('/template-map/configs', {
+      method: 'POST',
+      body: JSON.stringify({ name, subject: qs('#tpl-subject').value, body: qs('#tpl-body').value, mapping }),
+    });
+    qs('#config-name-input').value = '';
+    showAlert(qs('#global-msg'), 'success', `Config "${name}" saved.`);
+    loadConfigs();
+  } catch (err) { showAlert(qs('#global-msg'), 'error', err.message); }
+}
+
+async function applyConfig(id) {
+  try {
+    const configs = await apiFetch('/template-map/configs');
+    const cfg = configs.find(c => c.id === id);
+    if (!cfg) return;
+    qs('#tpl-subject').value = cfg.subject || '';
+    qs('#tpl-body').value    = cfg.body    || '';
+    mapping = cfg.mapping || {};
+    renderMapping();
+    showAlert(qs('#global-msg'), 'success', `Config "${cfg.name}" loaded.`);
+  } catch (err) { showAlert(qs('#global-msg'), 'error', err.message); }
+}
+
+async function deleteConfig(id) {
+  try {
+    await apiFetch(`/template-map/configs/${id}`, { method:'DELETE' });
+    loadConfigs();
+  } catch (err) { showAlert(qs('#global-msg'), 'error', err.message); }
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function startGenerate() {
+  if (!excelRows.length) { showAlert(qs('#global-msg'), 'error', 'Please upload an Excel file first.'); return; }
+  const body = qs('#tpl-body').value.trim();
+  if (!body) { showAlert(qs('#global-msg'), 'error', 'Email body template is required.'); return; }
+
+  const btn = qs('#gen-btn');
+  btn.disabled = true; btn.textContent = 'Generating…';
+  qs('#gen-status').textContent = `Processing ${excelRows.length} rows…`;
+  qs('#global-msg').innerHTML = '';
+
+  try {
+    const data = await apiFetch('/template-map/generate', {
+      method: 'POST',
+      body: JSON.stringify({ rows: excelRows, subject: qs('#tpl-subject').value, body, mapping }),
+    });
+    generated = data;
+    renderPreview(data);
+    setStep(2);
+    qs('#s2-section').classList.remove('section-hidden');
+    qs('#s2-section').scrollIntoView({ behavior:'smooth', block:'start' });
+  } catch (err) {
+    showAlert(qs('#global-msg'), 'error', 'Generation failed: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Regenerate';
+    qs('#gen-status').textContent = '';
+  }
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+function renderPreview(items) {
+  const ready = items.filter(i => i.status === 'ready').length;
+  const errs  = items.filter(i => i.status === 'error').length;
+  qs('#pv-count').textContent = `— ${ready} ready${errs ? `, ${errs} skipped (no email)` : ''}`;
+
+  qs('#pv-list').innerHTML = items.map((it, idx) => `
+    <div class="preview-card status-${it.status}" id="pvcard-${idx}">
+      <div class="pv-header" onclick="togglePv(${idx})">
+        <span class="pv-sno">#${it.sno}</span>
+        <span class="pv-email">${escHtml(it.email || '— no email —')}</span>
+        ${it.company ? `<span class="co-badge">${escHtml(it.company)}</span>` : ''}
+        ${it.name    ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(it.name)}</span>` : ''}
+        <span class="status-pill ${it.status}">${it.status}</span>
+        <span class="chevron" id="pv-ch-${idx}">▾</span>
+      </div>
+      <div class="pv-body-wrap" id="pv-bw-${idx}" style="margin-top:12px">
+        ${it.error ? `<div style="font-size:12px;color:#e74c3c;margin-bottom:8px">⚠ ${escHtml(it.error)}</div>` : ''}
+        <div class="pv-label">Subject</div>
+        <input class="pv-input" type="text" id="pv-subj-${idx}" value="${escHtml(it.subject)}">
+        <div class="pv-label">Body</div>
+        <textarea class="pv-body-ta" id="pv-body-${idx}" rows="7">${escHtml(it.body)}</textarea>
+      </div>
+    </div>`).join('');
+}
+
+function togglePv(idx) {
+  const bw = qs(`#pv-bw-${idx}`), ch = qs(`#pv-ch-${idx}`);
+  bw.style.display = bw.style.display === 'none' ? '' : 'none';
+  ch.style.transform = bw.style.display === 'none' ? 'rotate(-90deg)' : '';
+}
+function expandAllPv()   { qsa('.pv-body-wrap').forEach(el => el.style.display = ''); qsa('.chevron').forEach(c => c.style.transform = ''); }
+function collapseAllPv() { qsa('.pv-body-wrap').forEach(el => el.style.display = 'none'); qsa('.chevron').forEach(c => c.style.transform = 'rotate(-90deg)'); }
+
+function onResumeChosen(inp) {
+  const f = inp.files[0];
+  qs('#resume-label').textContent = f ? f.name : 'No file chosen';
+  qs('#resume-label').style.color = f ? 'var(--primary)' : 'var(--text-muted)';
+  qs('#resume-clear-btn').style.display = f ? '' : 'none';
+}
+
+function clearResume() {
+  qs('#resume-file').value = '';
+  qs('#resume-label').textContent = 'No file chosen';
+  qs('#resume-label').style.color = 'var(--text-muted)';
+  qs('#resume-clear-btn').style.display = 'none';
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────────
+async function startSend() {
+  const items = generated
+    .filter(it => it.status !== 'error' || qs(`#pv-subj-${generated.indexOf(it)}`))
+    .map((it, idx) => ({
+      email:   it.email,
+      company: it.company,
+      name:    it.name,
+      subject: qs(`#pv-subj-${idx}`)?.value || it.subject,
+      body:    qs(`#pv-body-${idx}`)?.value  || it.body,
+    }))
+    .filter(it => it.email);
+
+  if (!items.length) { showAlert(qs('#global-msg'), 'error', 'No valid emails to send.'); return; }
+
+  const btn = qs('#send-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+
+  try {
+    const fd = new FormData();
+    fd.append('items', JSON.stringify(items));
+    fd.append('delaySeconds', qs('#ss-delay').value || '10');
+    fd.append('batchSize',    qs('#ss-batch').value || '10');
+    fd.append('breakMinutes', qs('#ss-break').value || '2');
+    const resumeFile = qs('#resume-file')?.files[0];
+    if (resumeFile) fd.append('resume', resumeFile);
+
+    const res = await fetch('/api/bulk/send', { method:'POST', body: fd });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+    const { sessionId } = await res.json();
+
+    setStep(3);
+    qs('#s3-section').classList.remove('section-hidden');
+    qs('#s3-section').scrollIntoView({ behavior:'smooth', block:'start' });
+    initProgTable(items);
+    updateStats(items.length, 0, 0);
+    connectProgress(sessionId, items.length);
+  } catch (err) {
+    showAlert(qs('#global-msg'), 'error', 'Send failed: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Send All Emails';
+  }
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+function initProgTable(items) {
+  qs('#prog-table').innerHTML = items.map((it, i) => `
+    <tr id="prog-row-${i}" style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;color:var(--text-muted)">${i+1}</td>
+      <td style="padding:8px 10px">${escHtml(it.email)}</td>
+      <td style="padding:8px 10px"><span class="co-badge">${escHtml(it.company||'—')}</span></td>
+      <td style="padding:8px 10px" id="prog-st-${i}"><span class="status-pill pending">pending</span></td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text-muted)" id="prog-t-${i}">—</td>
+    </tr>`).join('');
+}
+
+function updateStats(total, sent, failed) {
+  const pend = total - sent - failed;
+  qs('#st-total').textContent  = total;
+  qs('#st-sent').textContent   = sent;
+  qs('#st-failed').textContent = failed;
+  qs('#st-pend').textContent   = pend;
+  const pct = total > 0 ? Math.round(((sent+failed)/total)*100) : 0;
+  qs('#prog-fill').style.width = pct + '%';
+}
+
+function updateProgRow(index, row) {
+  const st = qs(`#prog-st-${index}`);
+  const t  = qs(`#prog-t-${index}`);
+  if (!st) return;
+  const cls = row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'pending';
+  st.innerHTML = `<span class="status-pill ${cls}">${row.status}</span>${row.error ? `<div style="font-size:11px;color:#e74c3c;margin-top:2px">${escHtml(row.error)}</div>` : ''}`;
+  if (t) t.textContent = row.sentAt ? new Date(row.sentAt).toLocaleTimeString() : '—';
+}
+
+let breakTimer = null;
+
+function connectProgress(sessionId, total) {
+  const es = new EventSource(`/api/bulk/progress/${sessionId}`);
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'init') {
+      d.results.forEach((r, i) => updateProgRow(i, r));
+      updateStats(d.total, d.sent, d.failed);
+      if (d.status === 'done') finish(d, es);
+    }
+    if (d.type === 'update') {
+      updateProgRow(d.index, d.row);
+      updateStats(d.total, d.sent, d.failed);
+      qs('#send-lbl').textContent = `${d.sent + d.failed} / ${d.total} processed…`;
+    }
+    if (d.type === 'break') startBreakBanner(d);
+    if (d.type === 'break-done') stopBreakBanner();
+    if (d.type === 'done') { stopBreakBanner(); finish(d, es); }
+  };
+  es.onerror = () => es.close();
+}
+
+function startBreakBanner(data) {
+  const banner = qs('#break-banner');
+  banner.style.display = 'flex';
+  qs('#break-title').textContent = `Batch ${data.batchNum} done — taking a break`;
+  const until = new Date(data.breakUntil);
+  if (breakTimer) clearInterval(breakTimer);
+  breakTimer = setInterval(() => {
+    const sec = Math.max(0, Math.round((until - Date.now()) / 1000));
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    qs('#break-countdown').textContent = `${m}:${s}`;
+    qs('#break-sub').textContent = sec > 0 ? `Resuming in ${m}:${s}` : 'Resuming…';
+    if (sec === 0) stopBreakBanner();
+  }, 500);
+}
+
+function stopBreakBanner() {
+  if (breakTimer) { clearInterval(breakTimer); breakTimer = null; }
+  const b = qs('#break-banner');
+  if (b) b.style.display = 'none';
+}
+
+function finish(d, es) {
+  es.close();
+  qs('#send-lbl').textContent = `Complete — ${d.sent} sent, ${d.failed} failed.`;
+  qs('#send-btn').textContent = 'Send Complete';
+  if (d.failed === 0) qs('#prog-fill').style.background = '#27ae60';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+// Seed default placeholders
+DEFAULT_PLACEHOLDERS.forEach(ph => { mapping[ph] = ph; });
+renderMapping();
+loadConfigs();
+onTemplateChange();
+</script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile & Settings — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page" style="max-width:760px">
+      <div id="msg"></div>
+
+      <form id="profile-form">
+
+        <!-- Identity -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:16px">Personal Information</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Full Name *</label>
+              <input id="full_name" class="input" type="text" placeholder="Mittal Domaidya" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Your Email (for Gmail sending)</label>
+              <input id="email" class="input" type="email" placeholder="you@gmail.com">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input id="phone" class="input" type="text" placeholder="+91 98765 43210">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Years of Experience</label>
+              <input id="experience_years" class="input" type="number" min="0" max="50" placeholder="2">
+            </div>
+          </div>
+        </div>
+
+        <!-- Links -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:16px">Professional Links</h3>
+          <div class="form-group">
+            <label class="form-label">LinkedIn URL</label>
+            <input id="linkedin" class="input" type="url" placeholder="https://linkedin.com/in/yourname">
+          </div>
+          <div class="form-group">
+            <label class="form-label">GitHub URL</label>
+            <input id="github" class="input" type="url" placeholder="https://github.com/yourname">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Portfolio / Website</label>
+            <input id="portfolio" class="input" type="url" placeholder="https://yoursite.com">
+          </div>
+        </div>
+
+        <!-- Bio -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:16px">Bio</h3>
+          <div class="form-group">
+            <label class="form-label">Short Bio (used in AI email prompt)</label>
+            <textarea id="bio" class="textarea" rows="4" placeholder="e.g. Backend engineer with 3 years experience in Node.js, Python, and cloud infrastructure…"></textarea>
+            <div class="form-hint">Keep it factual and concise. The AI uses this to write personalized emails.</div>
+          </div>
+        </div>
+
+        <!-- Skills -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Skills</h3>
+          <div class="flex gap-8 mb-8">
+            <input id="skill-input" class="input" type="text" placeholder="e.g. Node.js, Python, Docker…" style="max-width:280px">
+            <button type="button" class="btn btn-ghost" onclick="addSkill()">Add</button>
+          </div>
+          <div class="chips-container" id="skills-chips"></div>
+          <div class="form-hint mt-8">Press Enter or click Add after each skill.</div>
+        </div>
+
+        <!-- Projects -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Projects</h3>
+          <div id="projects-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="addProject()">+ Add Project</button>
+          <div class="form-hint mt-4">Projects are referenced in AI-generated emails.</div>
+        </div>
+
+        <div class="flex gap-12">
+          <button type="submit" class="btn btn-primary btn-lg">Save Profile</button>
+        </div>
+      </form>
+
+      <!-- API Settings -->
+      <div class="card mb-24" style="margin-top:32px">
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:4px">API Settings</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">NVIDIA API key used to generate emails via DeepSeek. Get one at <a href="https://build.nvidia.com" target="_blank" style="color:var(--primary)">build.nvidia.com</a>.</p>
+        <div id="api-msg"></div>
+        <div class="form-group">
+          <label class="form-label">NVIDIA API Key</label>
+          <div class="flex gap-8">
+            <input id="nvidia-key-input" class="input flex-1" type="password" placeholder="nvapi-…" autocomplete="off">
+            <button type="button" class="btn btn-ghost" id="toggle-key-btn" onclick="toggleKeyVisibility()">Show</button>
+          </div>
+          <div class="form-hint" id="key-status"></div>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="saveApiKey()">Save API Key</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Profile & Settings');
+
+let skills = [];
+let projects = [];
+
+// ── Load profile ─────────────────────────────────────────────────────────────
+async function loadProfile() {
+  try {
+    const p = await api.getProfile();
+    qs('#full_name').value = p.full_name || '';
+    qs('#email').value     = p.email || '';
+    qs('#phone').value     = p.phone || '';
+    qs('#linkedin').value  = p.linkedin || '';
+    qs('#github').value    = p.github || '';
+    qs('#portfolio').value = p.portfolio || '';
+    qs('#bio').value       = p.bio || '';
+    qs('#experience_years').value = p.experience_years || 0;
+
+    skills = Array.isArray(p.skills) ? p.skills.filter(Boolean) : [];
+    projects = Array.isArray(p.projects) ? p.projects : [];
+
+    renderSkills();
+    renderProjects();
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', 'Failed to load profile: ' + err.message);
+  }
+}
+
+// ── Skills ────────────────────────────────────────────────────────────────────
+function renderSkills() {
+  qs('#skills-chips').innerHTML = skills.map((s, i) => `
+    <div class="chip">
+      ${escHtml(s)}
+      <span class="chip-close" onclick="removeSkill(${i})">×</span>
+    </div>`).join('');
+}
+
+function addSkill() {
+  const val = qs('#skill-input').value.trim();
+  if (!val) return;
+  val.split(',').map(s => s.trim()).filter(Boolean).forEach(s => {
+    if (!skills.includes(s)) skills.push(s);
+  });
+  qs('#skill-input').value = '';
+  renderSkills();
+}
+
+function removeSkill(i) { skills.splice(i, 1); renderSkills(); }
+
+qs('#skill-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } });
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+function renderProjects() {
+  qs('#projects-list').innerHTML = projects.map((p, i) => `
+    <div class="card mb-8" style="padding:12px">
+      <div class="flex gap-8 items-center mb-8">
+        <input class="input flex-1" type="text" placeholder="Project name" value="${escHtml(p.name || '')}"
+               oninput="projects[${i}].name=this.value">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeProject(${i})">Remove</button>
+      </div>
+      <textarea class="textarea" rows="2" placeholder="Brief description (1-2 sentences)" style="font-size:13px"
+                oninput="projects[${i}].description=this.value">${escHtml(p.description || '')}</textarea>
+      <input class="input mt-8" type="url" placeholder="Project URL (optional)" value="${escHtml(p.url || '')}"
+             style="font-size:13px" oninput="projects[${i}].url=this.value">
+    </div>`).join('');
+}
+
+function addProject() {
+  projects.push({ name: '', description: '', url: '' });
+  renderProjects();
+  qs('#projects-list').lastElementChild?.querySelector('input')?.focus();
+}
+
+function removeProject(i) { projects.splice(i, 1); renderProjects(); }
+
+// ── Save ──────────────────────────────────────────────────────────────────────
+qs('#profile-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.submitter;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const payload = {
+    full_name:        qs('#full_name').value.trim(),
+    email:            qs('#email').value.trim() || null,
+    phone:            qs('#phone').value.trim() || null,
+    linkedin:         qs('#linkedin').value.trim() || null,
+    github:           qs('#github').value.trim() || null,
+    portfolio:        qs('#portfolio').value.trim() || null,
+    bio:              qs('#bio').value.trim() || null,
+    experience_years: parseInt(qs('#experience_years').value, 10) || 0,
+    skills:           skills.filter(Boolean),
+    projects:         projects.filter(p => p.name),
+  };
+
+  try {
+    await api.saveProfile(payload);
+    showAlert(qs('#msg'), 'success', 'Profile saved successfully!');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', 'Save failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Profile';
+  }
+});
+
+loadProfile();
+loadApiSettings();
+
+// ── API Settings ──────────────────────────────────────────────────────────────
+async function loadApiSettings() {
+  try {
+    const data = await fetch('/api/settings').then(r => r.json());
+    const status = qs('#key-status');
+    if (data.configured) {
+      qs('#nvidia-key-input').placeholder = data.nvidia_api_key;
+      status.textContent = 'NVIDIA API key is configured.';
+      status.style.color = 'var(--success, green)';
+    } else {
+      status.textContent = 'No API key set — email generation will fail until you add one.';
+      status.style.color = 'var(--danger, red)';
+    }
+  } catch (err) {
+    console.error('Failed to load API settings', err);
+  }
+}
+
+function toggleKeyVisibility() {
+  const input = qs('#nvidia-key-input');
+  const btn = qs('#toggle-key-btn');
+  if (input.type === 'password') { input.type = 'text'; btn.textContent = 'Hide'; }
+  else { input.type = 'password'; btn.textContent = 'Show'; }
+}
+
+async function saveApiKey() {
+  const key = qs('#nvidia-key-input').value.trim();
+  if (!key) { showAlert(qs('#api-msg'), 'error', 'Please enter your NVIDIA API key.'); return; }
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nvidia_api_key: key }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+    qs('#nvidia-key-input').value = '';
+    showAlert(qs('#api-msg'), 'success', 'API key saved successfully!');
+    loadApiSettings();
+  } catch (err) {
+    showAlert(qs('#api-msg'), 'error', 'Failed to save: ' + err.message);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .console-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--card-bg, #1a1a2e);
+      border-bottom: 1px solid var(--border, #2a2a3e);
+      flex-wrap: wrap;
+    }
+    .console-toolbar .filter-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border, #333);
+      background: transparent;
+      color: var(--text-muted, #888);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: monospace;
+    }
+    .console-toolbar .filter-btn.active { background: var(--primary, #5c6ef8); color: #fff; border-color: var(--primary, #5c6ef8); }
+    .console-toolbar .filter-btn.lvl-error.active  { background: #e74c3c; border-color: #e74c3c; }
+    .console-toolbar .filter-btn.lvl-warn.active   { background: #f39c12; border-color: #f39c12; }
+    .console-toolbar .filter-btn.lvl-info.active   { background: #27ae60; border-color: #27ae60; }
+    .console-toolbar .filter-btn.lvl-log.active    { background: #2980b9; border-color: #2980b9; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #555; flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.connected    { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+    .status-dot.reconnecting { background: #f39c12; }
+    .status-dot.error        { background: #e74c3c; }
+    #status-label { font-size: 12px; color: var(--text-muted, #888); font-family: monospace; }
+
+    .console-wrap {
+      flex: 1;
+      overflow-y: auto;
+      background: #0d0d16;
+      font-family: 'Fira Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+      padding: 8px 0;
+    }
+    .log-line {
+      display: flex;
+      gap: 0;
+      padding: 1px 16px;
+      border-left: 3px solid transparent;
+      word-break: break-all;
+    }
+    .log-line:hover { background: rgba(255,255,255,0.04); }
+    .log-line.lvl-error { border-left-color: #e74c3c; }
+    .log-line.lvl-warn  { border-left-color: #f39c12; }
+    .log-line.lvl-info  { border-left-color: #27ae60; }
+    .log-line.lvl-log   { border-left-color: #2980b9; }
+
+    .log-line.hidden { display: none; }
+
+    .log-ts    { color: #555; flex-shrink: 0; margin-right: 10px; user-select: none; }
+    .log-level { flex-shrink: 0; margin-right: 10px; font-weight: 600; width: 38px; text-transform: uppercase; font-size: 11px; }
+    .log-line.lvl-error .log-level { color: #e74c3c; }
+    .log-line.lvl-warn  .log-level { color: #f39c12; }
+    .log-line.lvl-info  .log-level { color: #27ae60; }
+    .log-line.lvl-log   .log-level { color: #5c6ef8; }
+    .log-msg   { color: #c9d1d9; flex: 1; white-space: pre-wrap; }
+    .log-line.lvl-error .log-msg { color: #ff6b6b; }
+    .log-line.lvl-warn  .log-msg { color: #ffd93d; }
+
+    .console-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: #444;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .toolbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .console-page {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 48px);
+      overflow: hidden;
+    }
+    #scroll-lock-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border, #333);
+      background: transparent;
+      color: var(--text-muted, #888);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #scroll-lock-btn.locked { background: #f39c12; border-color: #f39c12; color: #000; }
+    #clear-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid #e74c3c44;
+      background: transparent;
+      color: #e74c3c;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #clear-btn:hover { background: #e74c3c22; }
+    #log-count { font-size: 11px; color: #444; font-family: monospace; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main" style="overflow:hidden">
+    <div class="topbar" id="topbar"></div>
+    <div class="console-page">
+
+      <div class="console-toolbar">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-label">Connecting…</span>
+
+        <div style="width:1px;height:16px;background:var(--border,#333);margin:0 4px"></div>
+
+        <button class="filter-btn active" data-level="all">ALL</button>
+        <button class="filter-btn lvl-error" data-level="error">ERROR</button>
+        <button class="filter-btn lvl-warn"  data-level="warn">WARN</button>
+        <button class="filter-btn lvl-info"  data-level="info">INFO</button>
+        <button class="filter-btn lvl-log"   data-level="log">LOG</button>
+
+        <div class="toolbar-right">
+          <span id="log-count">0 lines</span>
+          <button id="scroll-lock-btn" class="locked">Auto-scroll ON</button>
+          <button id="clear-btn">Clear</button>
+        </div>
+      </div>
+
+      <div class="console-wrap" id="console-wrap">
+        <div class="console-empty" id="empty-msg">Waiting for logs…</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Console');
+
+const wrap       = document.getElementById('console-wrap');
+const emptyMsg   = document.getElementById('empty-msg');
+const statusDot  = document.getElementById('status-dot');
+const statusLabel= document.getElementById('status-label');
+const logCount   = document.getElementById('log-count');
+const lockBtn    = document.getElementById('scroll-lock-btn');
+const clearBtn   = document.getElementById('clear-btn');
+
+let autoScroll  = true;
+let activeLevel = 'all';
+let totalLines  = 0;
+let es          = null;
+
+// ── Scroll lock ───────────────────────────────────────────────────────────────
+lockBtn.addEventListener('click', () => {
+  autoScroll = !autoScroll;
+  lockBtn.textContent = autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF';
+  lockBtn.classList.toggle('locked', autoScroll);
+  if (autoScroll) scrollBottom();
+});
+
+wrap.addEventListener('scroll', () => {
+  const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 40;
+  if (!atBottom && autoScroll) {
+    autoScroll = false;
+    lockBtn.textContent = 'Auto-scroll OFF';
+    lockBtn.classList.remove('locked');
+  }
+});
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeLevel = btn.dataset.level;
+    applyFilter();
+  });
+});
+
+function applyFilter() {
+  document.querySelectorAll('.log-line').forEach(el => {
+    el.classList.toggle('hidden', activeLevel !== 'all' && el.dataset.level !== activeLevel);
+  });
+}
+
+// ── Clear ─────────────────────────────────────────────────────────────────────
+clearBtn.addEventListener('click', () => {
+  document.querySelectorAll('.log-line').forEach(el => el.remove());
+  totalLines = 0;
+  updateCount();
+  emptyMsg.style.display = '';
+});
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function fmtTs(iso) {
+  const d = new Date(iso);
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
+function appendLine(entry) {
+  emptyMsg.style.display = 'none';
+  const el = document.createElement('div');
+  el.className = `log-line lvl-${entry.level}`;
+  el.dataset.level = entry.level;
+  if (activeLevel !== 'all' && entry.level !== activeLevel) el.classList.add('hidden');
+
+  el.innerHTML =
+    `<span class="log-ts">${fmtTs(entry.ts)}</span>` +
+    `<span class="log-level">${escHtml(entry.level)}</span>` +
+    `<span class="log-msg">${escHtml(entry.message)}</span>`;
+
+  wrap.appendChild(el);
+  totalLines++;
+  updateCount();
+  if (autoScroll) scrollBottom();
+}
+
+function updateCount() { logCount.textContent = totalLines + ' lines'; }
+function scrollBottom() { wrap.scrollTop = wrap.scrollHeight; }
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  statusDot.className = 'status-dot ' + state;
+  statusLabel.textContent = text;
+}
+
+function connect() {
+  if (es) es.close();
+  setStatus('reconnecting', 'Connecting…');
+
+  es = new EventSource('/api/logs/stream');
+
+  es.onopen = () => setStatus('connected', 'Live');
+
+  es.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+
+    if (data.type === 'history') {
+      data.entries.forEach(appendLine);
+    } else {
+      appendLine(data);
+    }
+  };
+
+  es.onerror = () => {
+    setStatus('error', 'Disconnected — reconnecting…');
+    es.close();
+    setTimeout(connect, 3000);
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campaigns — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page">
+      <div id="msg"></div>
+
+      <div class="flex items-center justify-between mb-16">
+        <h2 style="font-size:15px;font-weight:600">All Campaigns</h2>
+        <a href="/upload.html" class="btn btn-primary btn-sm">+ New Campaign</a>
+      </div>
+
+      <div class="table-wrap" id="campaigns-table">
+        <div style="padding:24px">${spinner('Loading…')}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Campaigns');
+
+async function load() {
+  try {
+    const campaigns = await api.getCampaigns();
+    if (!campaigns.length) {
+      qs('#campaigns-table').innerHTML = emptyState('📭', 'No campaigns', 'Upload an Excel file to create your first campaign.');
+      return;
+    }
+    qs('#campaigns-table').innerHTML = `
+      <table>
+        <thead><tr><th>Name</th><th>Status</th><th>Total</th><th>Sent</th><th>Failed</th><th>Pending</th><th>Mode</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+          ${campaigns.map(c => `
+            <tr>
+              <td><a href="/campaign.html?id=${c.id}">${escHtml(c.name)}</a></td>
+              <td>${badge(c.status)}</td>
+              <td>${c.total_emails}</td>
+              <td style="color:var(--accent-h)">${c.sent_count}</td>
+              <td style="color:var(--red-h)">${c.failed_count}</td>
+              <td style="color:var(--yellow)">${c.pending_count}</td>
+              <td>${c.test_mode > 0 ? `<span class="badge badge-generated">TEST(${c.test_mode})</span>` : '<span class="text-muted text-sm">Full</span>'}</td>
+              <td class="text-muted text-sm">${fmt(c.created_at)}</td>
+              <td>
+                <div class="flex gap-8">
+                  <a href="/campaign.html?id=${c.id}" class="btn btn-ghost btn-sm">View</a>
+                  <button class="btn btn-danger btn-sm" onclick="deleteCampaign('${c.id}', this)">Delete</button>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+async function deleteCampaign(id, btn) {
+  if (!confirm('Delete this campaign and all its emails?')) return;
+  btn.disabled = true;
+  try {
+    await api.deleteCampaign(id);
+    load();
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

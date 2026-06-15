@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campaign — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page">
+      <div id="msg"></div>
+
+      <!-- Campaign header card -->
+      <div class="card mb-24" id="campaign-header">
+        <div style="padding:24px;color:var(--muted)">${spinner('Loading campaign…')}</div>
+      </div>
+
+      <!-- Filters + search -->
+      <div class="flex items-center gap-12 mb-16" id="filters">
+        <input id="search" class="input" style="max-width:280px" type="text" placeholder="Search company, email…">
+        <select id="status-filter" class="select" style="max-width:180px">
+          <option value="">All Statuses</option>
+          <option value="PENDING">Pending</option>
+          <option value="GENERATED">Generated</option>
+          <option value="SENT">Sent</option>
+          <option value="FAILED">Failed</option>
+        </select>
+        <button id="retry-all-btn" class="btn btn-ghost btn-sm hidden">
+          ↺ Retry All Failed
+        </button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <a id="export-csv" href="#" class="btn btn-ghost btn-sm">Export CSV</a>
+          <a id="export-xlsx" href="#" class="btn btn-ghost btn-sm">Export Excel</a>
+        </div>
+      </div>
+
+      <!-- Email table -->
+      <div class="table-wrap" id="email-table">
+        <div style="padding:24px">${spinner('Loading emails…')}</div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Email body modal -->
+<div id="email-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="flex items-center justify-between mb-16">
+      <div class="modal-title" id="modal-title">Email Preview</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕ Close</button>
+    </div>
+    <div id="modal-body" style="white-space:pre-wrap;font-size:13px;line-height:1.7;max-height:60vh;overflow-y:auto;background:var(--surface2);padding:16px;border-radius:8px;border:1px solid var(--border)"></div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Campaign Details');
+
+const campaignId = urlParam('id');
+if (!campaignId) { location.href = '/campaigns.html'; }
+
+let currentPage = 1;
+const PAGE_SIZE = 25;
+let campaign = null;
+let pollTimer = null;
+
+// Export links
+qs('#export-csv').href  = api.exportUrl(campaignId, 'csv');
+qs('#export-xlsx').href = api.exportUrl(campaignId, 'excel');
+
+async function loadCampaign() {
+  try {
+    campaign = await api.getCampaign(campaignId);
+    document.title = `${campaign.name} — JobFinder`;
+    buildLayout(campaign.name);
+
+    const pct = campaign.total_emails > 0
+      ? Math.round((campaign.sent_count / campaign.total_emails) * 100) : 0;
+
+    qs('#campaign-header').innerHTML = `
+      <div class="flex items-center justify-between gap-16 mb-16">
+        <div>
+          <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">${escHtml(campaign.name)}</h2>
+          <div class="text-muted text-sm">Created ${fmt(campaign.created_at)}</div>
+        </div>
+        <div class="flex gap-8">
+          ${badge(campaign.status)}
+          ${campaign.test_mode > 0 ? `<span class="badge badge-generated">TEST (${campaign.test_mode})</span>` : ''}
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" style="font-size:24px">${campaign.total_emails}</div></div>
+        <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value green" style="font-size:24px">${campaign.sent_count}</div></div>
+        <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value red" style="font-size:24px">${campaign.failed_count}</div></div>
+        <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value yellow" style="font-size:24px">${campaign.pending_count}</div></div>
+      </div>
+
+      <div class="mb-16">
+        <div class="flex justify-between mb-4 text-sm text-muted"><span>Progress</span><span>${pct}%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>
+
+      <div class="flex gap-8">
+        ${campaign.status === 'PENDING' || campaign.status === 'PAUSED'
+          ? `<button class="btn btn-primary" onclick="startCampaign()">
+               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+               ${campaign.status === 'PAUSED' ? 'Resume' : 'Start'} Sending
+             </button>` : ''}
+        ${campaign.status === 'PROCESSING'
+          ? `<button class="btn btn-ghost" disabled><span class="spinner"></span> Processing…</button>` : ''}
+        <a href="/preview.html?id=${campaignId}" class="btn btn-blue">Preview Emails</a>
+        ${campaign.failed_count > 0
+          ? `<button class="btn btn-ghost" onclick="retryAll()">↺ Retry Failed (${campaign.failed_count})</button>` : ''}
+      </div>`;
+
+    // Show retry button in filter bar if needed
+    if (campaign.failed_count > 0) qs('#retry-all-btn').classList.remove('hidden');
+
+    // Auto-poll while processing
+    if (campaign.status === 'PROCESSING') {
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(() => { loadCampaign(); loadEmails(); }, 8000);
+    }
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+async function loadEmails() {
+  const search = qs('#search').value.trim();
+  const status = qs('#status-filter').value;
+  try {
+    const data = await api.getEmails({
+      campaign_id: campaignId,
+      ...(search ? { search } : {}),
+      ...(status ? { status } : {}),
+      page: currentPage,
+      size: PAGE_SIZE,
+    });
+
+    if (!data.items.length) {
+      qs('#email-table').innerHTML = emptyState('📭', 'No emails found', 'Try adjusting the filter.');
+      qs('#pagination').innerHTML = '';
+      return;
+    }
+
+    qs('#email-table').innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Recipient</th><th>Company</th><th>Role</th><th>Status</th><th>Sent At</th><th>Retries</th><th>Error</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${data.items.map(e => `
+            <tr>
+              <td>
+                <div style="font-weight:500">${escHtml(e.hr_name || '—')}</div>
+                <div class="text-muted text-sm text-mono">${escHtml(e.email)}</div>
+              </td>
+              <td>${escHtml(e.company_name)}</td>
+              <td>${escHtml(e.job_role || '—')}</td>
+              <td>${badge(e.status)}</td>
+              <td class="text-muted text-sm">${fmt(e.sent_at)}</td>
+              <td class="text-muted text-sm">${e.retry_count}</td>
+              <td class="text-sm" style="color:var(--red-h);max-width:200px" title="${escHtml(e.error_message || '')}">${e.error_message ? escHtml(e.error_message.slice(0, 60)) + (e.error_message.length > 60 ? '…' : '') : '—'}</td>
+              <td>
+                ${e.subject ? `<button class="btn btn-ghost btn-sm" onclick='viewEmail(${JSON.stringify(e)})'>View</button>` : '—'}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    // Pagination
+    const totalPages = Math.ceil(data.total / PAGE_SIZE);
+    qs('#pagination').innerHTML = totalPages <= 1 ? '' : `
+      <button class="btn btn-ghost btn-sm" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>
+      <span class="page-info">Page ${currentPage} of ${totalPages} (${data.total} total)</span>
+      <button class="btn btn-ghost btn-sm" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>`;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+function changePage(p) { currentPage = p; loadEmails(); }
+
+async function startCampaign() {
+  try {
+    await api.startCampaign(campaignId);
+    showAlert(qs('#msg'), 'success', 'Campaign started! Emails are being sent.');
+    setTimeout(() => { loadCampaign(); loadEmails(); }, 1500);
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+async function retryAll() {
+  if (!confirm('Retry all failed emails?')) return;
+  try {
+    await api.retryCampaign(campaignId, null);
+    showAlert(qs('#msg'), 'success', 'Retrying failed emails…');
+    setTimeout(() => { loadCampaign(); loadEmails(); }, 1500);
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+function viewEmail(e) {
+  qs('#modal-title').textContent = `To: ${e.email} — ${e.subject || '(no subject)'}`;
+  qs('#modal-body').textContent = e.body || '(no body generated yet)';
+  qs('#email-modal').classList.remove('hidden');
+}
+
+function closeModal() { qs('#email-modal').classList.add('hidden'); }
+qs('#email-modal').addEventListener('click', e => { if (e.target === qs('#email-modal')) closeModal(); });
+
+// Filter events
+let debounce;
+qs('#search').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => { currentPage=1; loadEmails(); }, 350); });
+qs('#status-filter').addEventListener('change', () => { currentPage=1; loadEmails(); });
+qs('#retry-all-btn').addEventListener('click', retryAll);
+
+// Init
+loadCampaign();
+loadEmails();
+</script>
+</body>
+</html>

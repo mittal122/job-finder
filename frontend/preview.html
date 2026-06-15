@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Preview — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page">
+      <div id="msg"></div>
+
+      <div class="flex items-center gap-12 mb-24">
+        <a id="back-link" href="/campaigns.html" class="btn btn-ghost btn-sm">← Back to Campaign</a>
+        <div class="flex-1"></div>
+        <button id="generate-all-btn" class="btn btn-blue">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Generate All Emails
+        </button>
+        <button id="start-send-btn" class="btn btn-primary hidden">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Approve &amp; Start Sending
+        </button>
+      </div>
+
+      <div id="progress-section" class="card mb-24 hidden">
+        <div class="flex justify-between mb-8">
+          <span style="font-weight:600">Generating emails…</span>
+          <span id="gen-count" class="text-muted text-sm"></span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="gen-progress" style="width:0%"></div></div>
+      </div>
+
+      <div id="preview-list">
+        <div style="padding:24px;color:var(--muted)">
+          Click <strong>"Generate All Emails"</strong> to preview AI-generated emails before sending.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Email Preview');
+
+const campaignId = urlParam('id');
+if (!campaignId) location.href = '/campaigns.html';
+
+qs('#back-link').href = `/campaign.html?id=${campaignId}`;
+
+let pendingEmails = [];
+let generatedCount = 0;
+
+async function loadPending() {
+  try {
+    const data = await api.getEmails({ campaign_id: campaignId, size: 200, page: 1 });
+    pendingEmails = data.items;
+
+    // Show already-generated emails immediately
+    const generated = pendingEmails.filter(e => e.status === 'GENERATED' || e.status === 'SENT');
+    if (generated.length) {
+      renderPreviews(generated);
+      if (generated.length >= pendingEmails.filter(e => e.status !== 'FAILED').length) {
+        qs('#start-send-btn').classList.remove('hidden');
+      }
+    }
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+function renderPreviews(items) {
+  if (!items.length) {
+    qs('#preview-list').innerHTML = emptyState('📭', 'No generated emails yet', 'Click "Generate All Emails" to start.');
+    return;
+  }
+
+  qs('#preview-list').innerHTML = items.map(e => `
+    <div class="email-card">
+      <div class="email-card-header">
+        <div>
+          <div class="email-card-subject">${escHtml(e.subject || '(pending generation)')}</div>
+          <div class="email-card-meta">To: ${escHtml(e.hr_name ? e.hr_name + ' <' + e.email + '>' : e.email)} · ${escHtml(e.company_name)} · ${escHtml(e.job_role || 'N/A')}</div>
+        </div>
+        ${badge(e.status)}
+      </div>
+      ${e.body ? `<div class="email-card-body">${escHtml(e.body)}</div>` : `<div style="padding:12px 16px;color:var(--muted);font-size:13px">Body not yet generated.</div>`}
+    </div>`).join('');
+}
+
+// Generate all emails by starting campaign in preview-only mode
+// We call the start endpoint; the processor generates + records but the user
+// can review. Actually for preview we just generate without sending.
+// We'll poll the campaign email logs as they get GENERATED status.
+
+qs('#generate-all-btn').addEventListener('click', async () => {
+  qs('#generate-all-btn').disabled = true;
+  qs('#generate-all-btn').innerHTML = '<span class="spinner"></span> Generating…';
+  qs('#progress-section').classList.remove('hidden');
+  qs('#msg').innerHTML = '';
+
+  // Start the campaign (it will generate + send, but user can see progress live)
+  try {
+    await api.startCampaign(campaignId);
+    showAlert(qs('#msg'), 'info', 'Generation started. Previews appear as emails are generated.');
+    pollGeneration();
+  } catch (err) {
+    if (err.message.includes('already running')) {
+      showAlert(qs('#msg'), 'info', 'Campaign is already processing. Showing live progress.');
+      pollGeneration();
+    } else {
+      showAlert(qs('#msg'), 'error', err.message);
+      qs('#generate-all-btn').disabled = false;
+      qs('#generate-all-btn').innerHTML = 'Generate All Emails';
+    }
+  }
+});
+
+function pollGeneration() {
+  const interval = setInterval(async () => {
+    try {
+      const [camp, data] = await Promise.all([
+        api.getCampaign(campaignId),
+        api.getEmails({ campaign_id: campaignId, size: 200, page: 1 }),
+      ]);
+
+      const total = camp.total_emails || 1;
+      const done  = camp.sent_count + camp.failed_count;
+      const pct   = Math.round((done / total) * 100);
+
+      qs('#gen-progress').style.width = pct + '%';
+      qs('#gen-count').textContent = `${done} / ${total}`;
+
+      renderPreviews(data.items.filter(e => e.status !== 'PENDING'));
+
+      if (camp.status === 'COMPLETED' || camp.status === 'FAILED' || done >= total) {
+        clearInterval(interval);
+        qs('#generate-all-btn').innerHTML = '✓ Generation complete';
+        qs('#start-send-btn').classList.add('hidden'); // sending already happened
+        showAlert(qs('#msg'), 'success', `Campaign complete! ${camp.sent_count} sent, ${camp.failed_count} failed.`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, 5000);
+}
+
+qs('#start-send-btn').addEventListener('click', async () => {
+  if (!confirm('Approve these emails and start sending?')) return;
+  try {
+    await api.startCampaign(campaignId);
+    showAlert(qs('#msg'), 'success', 'Sending started!');
+    qs('#start-send-btn').disabled = true;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+});
+
+loadPending();
+</script>
+</body>
+</html>

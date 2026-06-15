@@ -1,0 +1,17 @@
+# Dependencies
+backend/node_modules/
+
+# Environment (contains secrets)
+.env
+
+# Uploads / temp files
+backend/uploads/
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

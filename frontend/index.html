@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page" id="page">
+      <div id="msg"></div>
+
+      <!-- Stats -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-label">Campaigns</div><div class="stat-value blue" id="s-campaigns">—</div></div>
+        <div class="stat-card"><div class="stat-label">Total Emails</div><div class="stat-value" id="s-total">—</div></div>
+        <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value green" id="s-sent">—</div></div>
+        <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value red" id="s-failed">—</div></div>
+        <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value yellow" id="s-pending">—</div></div>
+      </div>
+
+      <!-- Recent campaigns -->
+      <div class="flex items-center justify-between mb-16">
+        <h2 style="font-size:15px;font-weight:600">Recent Campaigns</h2>
+        <a href="/upload.html" class="btn btn-primary btn-sm">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Campaign
+        </a>
+      </div>
+
+      <div class="table-wrap" id="campaigns-table">
+        <div style="padding:24px;color:var(--muted)">${spinner('Loading campaigns…')}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('Dashboard');
+
+async function loadDashboard() {
+  try {
+    const [stats, campaigns] = await Promise.all([api.getStats(), api.getCampaigns()]);
+
+    qs('#s-campaigns').textContent = stats.total_campaigns;
+    qs('#s-total').textContent     = stats.total_emails;
+    qs('#s-sent').textContent      = stats.total_sent;
+    qs('#s-failed').textContent    = stats.total_failed;
+    qs('#s-pending').textContent   = stats.total_pending;
+
+    if (!campaigns.length) {
+      qs('#campaigns-table').innerHTML = emptyState('📭', 'No campaigns yet', 'Upload an Excel file to start your first campaign.');
+      return;
+    }
+
+    qs('#campaigns-table').innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Status</th><th>Total</th><th>Sent</th><th>Failed</th><th>Pending</th><th>Created</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${campaigns.map(c => `
+            <tr>
+              <td><a href="/campaign.html?id=${c.id}">${escHtml(c.name)}</a></td>
+              <td>${badge(c.status)}</td>
+              <td>${c.total_emails}</td>
+              <td style="color:var(--accent-h)">${c.sent_count}</td>
+              <td style="color:var(--red-h)">${c.failed_count}</td>
+              <td style="color:var(--yellow)">${c.pending_count}</td>
+              <td class="text-muted text-sm">${fmt(c.created_at)}</td>
+              <td>
+                <a href="/campaign.html?id=${c.id}" class="btn btn-ghost btn-sm">View</a>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+loadDashboard();
+// Auto-refresh every 15 seconds if any campaign is processing
+setInterval(async () => {
+  const stats = await api.getStats().catch(() => null);
+  if (stats && stats.total_pending > 0) loadDashboard();
+}, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Campaign — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page" style="max-width:760px">
+      <div id="msg"></div>
+
+      <form id="upload-form">
+        <!-- Campaign info -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:16px">Campaign Details</h3>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Campaign Name *</label>
+              <input id="campaign-name" class="input" type="text" placeholder="e.g. June Backend Applications" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Test Mode</label>
+              <select id="test-mode" class="select">
+                <option value="0">Full Send (all recipients)</option>
+                <option value="3">Test — first 3 emails only</option>
+                <option value="1">Test — 1 email only</option>
+              </select>
+              <div class="form-hint">Test mode sends only the first N emails.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Excel upload -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Recipient List (Excel) *</h3>
+          <p class="text-muted text-sm mb-16">
+            Required columns: <strong>Company Name</strong>, <strong>Email</strong>.<br>
+            Optional: <strong>HR Name</strong>, <strong>Job Role</strong>.
+          </p>
+
+          <div class="dropzone" id="drop-zone" onclick="qs('#excel-input').click()">
+            <div class="dropzone-icon">📊</div>
+            <div class="dropzone-title">Click or drag &amp; drop Excel file here</div>
+            <div class="dropzone-sub">.xlsx / .xls files only</div>
+          </div>
+          <input id="excel-input" type="file" accept=".xlsx,.xls" style="display:none">
+
+          <div id="file-info" class="mt-12 hidden">
+            <div class="flex items-center gap-8">
+              <span style="font-size:20px">📄</span>
+              <div>
+                <div id="file-name" style="font-weight:500"></div>
+                <div id="file-size" class="text-muted text-sm"></div>
+              </div>
+              <button type="button" id="clear-file" class="btn btn-ghost btn-sm" style="margin-left:auto">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resume attachment -->
+        <div class="card mb-24">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Resume Attachment (optional)</h3>
+          <div class="dropzone" id="resume-zone" onclick="qs('#resume-input').click()">
+            <div class="dropzone-icon">📎</div>
+            <div class="dropzone-title">Attach your resume PDF</div>
+            <div class="dropzone-sub">Will be attached to every email</div>
+          </div>
+          <input id="resume-input" type="file" accept=".pdf,.doc,.docx" style="display:none">
+
+          <div id="resume-info" class="mt-12 hidden">
+            <div class="flex items-center gap-8">
+              <span style="font-size:20px">📋</span>
+              <div>
+                <div id="resume-name" style="font-weight:500"></div>
+              </div>
+              <button type="button" id="clear-resume" class="btn btn-ghost btn-sm" style="margin-left:auto">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Validation preview -->
+        <div id="validation-card" class="card mb-24 hidden">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Validation Results</h3>
+          <div id="validation-content"></div>
+        </div>
+
+        <div class="flex gap-12">
+          <button type="submit" id="submit-btn" class="btn btn-primary btn-lg" disabled>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Create Campaign
+          </button>
+          <a href="/" class="btn btn-ghost btn-lg">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('New Campaign');
+
+let excelFile = null;
+let resumeFile = null;
+
+// Drop zone setup
+function setupDropZone(zoneId, inputId, onFile, accept) {
+  const zone = qs(`#${zoneId}`);
+  const input = qs(`#${inputId}`);
+
+  input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) onFile(file);
+  });
+}
+
+function setExcelFile(file) {
+  excelFile = file;
+  qs('#file-name').textContent = file.name;
+  qs('#file-size').textContent = (file.size / 1024).toFixed(1) + ' KB';
+  qs('#file-info').classList.remove('hidden');
+  qs('#drop-zone').style.display = 'none';
+  qs('#submit-btn').disabled = false;
+  qs('#validation-card').classList.add('hidden');
+}
+
+function setResumeFile(file) {
+  resumeFile = file;
+  qs('#resume-name').textContent = file.name;
+  qs('#resume-info').classList.remove('hidden');
+  qs('#resume-zone').style.display = 'none';
+}
+
+function clearExcel() {
+  excelFile = null;
+  qs('#excel-input').value = '';
+  qs('#file-info').classList.add('hidden');
+  qs('#drop-zone').style.display = '';
+  qs('#submit-btn').disabled = true;
+  qs('#validation-card').classList.add('hidden');
+}
+
+function clearResume() {
+  resumeFile = null;
+  qs('#resume-input').value = '';
+  qs('#resume-info').classList.add('hidden');
+  qs('#resume-zone').style.display = '';
+}
+
+setupDropZone('drop-zone', 'excel-input', setExcelFile);
+setupDropZone('resume-zone', 'resume-input', setResumeFile);
+qs('#clear-file').addEventListener('click', clearExcel);
+qs('#clear-resume').addEventListener('click', clearResume);
+
+// Form submit
+qs('#upload-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!excelFile) return showAlert(qs('#msg'), 'error', 'Please select an Excel file.');
+
+  const btn = qs('#submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Uploading…';
+  qs('#msg').innerHTML = '';
+
+  const fd = new FormData();
+  fd.append('excel', excelFile);
+  fd.append('name', qs('#campaign-name').value.trim() || 'Untitled Campaign');
+  fd.append('test_mode', qs('#test-mode').value);
+  if (resumeFile) fd.append('resume', resumeFile);
+
+  try {
+    const result = await api.uploadCampaign(fd);
+    const v = result.validation;
+
+    // Show validation summary
+    const vc = qs('#validation-content');
+    vc.innerHTML = `
+      <div class="grid-3 mb-16">
+        <div class="stat-card"><div class="stat-label">Total Rows</div><div class="stat-value" style="font-size:22px">${v.total_rows}</div></div>
+        <div class="stat-card"><div class="stat-label">Valid</div><div class="stat-value green" style="font-size:22px">${v.valid_rows.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Invalid / Skipped</div><div class="stat-value red" style="font-size:22px">${v.invalid_rows.length}</div></div>
+      </div>
+      ${v.duplicate_emails.length ? `<div class="alert alert-warn">Duplicate emails skipped: ${v.duplicate_emails.map(escHtml).join(', ')}</div>` : ''}
+      ${v.invalid_rows.length ? `
+        <details style="margin-bottom:12px">
+          <summary style="cursor:pointer;font-size:13px;color:var(--muted)">Show ${v.invalid_rows.length} invalid rows</summary>
+          <div style="margin-top:8px">
+            ${v.invalid_rows.map(r => `
+              <div style="padding:6px;background:var(--surface2);border-radius:4px;margin-bottom:4px;font-size:12px">
+                Row ${r.row}: ${escHtml(r.data.email || '(no email)')} — ${r.errors.map(e => escHtml(e.msg || e)).join(', ')}
+              </div>`).join('')}
+          </div>
+        </details>` : ''}
+      <div class="alert alert-success">Campaign created! ${v.valid_rows.length} recipients ready.</div>
+      <div class="flex gap-8 mt-12">
+        <a href="/campaign.html?id=${result.campaign_id}" class="btn btn-primary">View Campaign &amp; Send</a>
+        <a href="/preview.html?id=${result.campaign_id}" class="btn btn-blue">Preview Emails First</a>
+      </div>`;
+    qs('#validation-card').classList.remove('hidden');
+    showAlert(qs('#msg'), 'success', result.message);
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Create Campaign`;
+  }
+});
+</script>
+</body>
+</html>

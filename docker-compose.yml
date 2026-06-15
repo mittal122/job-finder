@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobfinder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobfinder}
+      POSTGRES_DB: ${POSTGRES_DB:-jobfinder}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jobfinder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jobfinder}:${POSTGRES_PASSWORD:-jobfinder}@postgres:5432/${POSTGRES_DB:-jobfinder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./frontend:/app/../frontend:ro
+      - uploads_data:/tmp/jobfinder_uploads
+
+volumes:
+  postgres_data:
+  uploads_data:
