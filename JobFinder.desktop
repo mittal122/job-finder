@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Job Finder
+Comment=Start the Job Finder bulk email app
+Exec=bash -c 'cd "/media/sun/drive/devops project/job finder" && bash start.sh'
+Icon=applications-internet
+Terminal=true
+Categories=Application;Network;
+StartupNotify=false
