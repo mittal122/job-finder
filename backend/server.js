@@ -17,6 +17,7 @@ const logsRoutes    = require('./routes/logs');
 const bulkRoutes        = require('./routes/bulk');
 const templateMapRoutes = require('./routes/template-map');
 const historyRoutes     = require('./routes/history');
+const { apiNotFound, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
@@ -42,10 +43,16 @@ app.use('/api/history',      historyRoutes);
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
+// Unmatched /api/* paths get a JSON 404, not Express's default HTML page
+app.use('/api', apiNotFound);
+
 // SPA fallback — serve index.html for any non-API route
 app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
+
+// Last-resort error handler — must be registered after all routes
+app.use(errorHandler);
 
 async function start() {
   await initDb();
