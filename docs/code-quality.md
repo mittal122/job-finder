@@ -61,7 +61,7 @@ from: `"${config.gmailSenderName || 'Mittal Domadiya'}" <${config.gmailAddress}>
 - `backend/db.js:11`: `full_name VARCHAR(255) DEFAULT 'Mittal Domaidya'`
 - `backend/services/campaignProcessor.js:15`: fallback profile `full_name: 'Mittal Domaidya'`
 - `backend/services/emailService.js:24`: fallback sender name `'Mittal Domadiya'` (note: different spelling — swapped "id"/"di")
-- `frontend/template-map.html:173,195`: sample bio template hardcodes `"Mittal Domadiya"` plus real biographical details (CHARUSAT, B.Tech CS) as default content that would be sent to real recruiters if not replaced
+- `frontend/template-map.html:173,195` (original audit; fixed in the Prompt 2 cleanup — see CHANGELOG.md): sample bio template hardcoded `"Mittal Domadiya"` plus real biographical details (CHARUSAT, B.Tech CS) **and a real phone number and personal Gmail address** as default content that would have been sent to real recruiters if not replaced. Note this real contact information remains in prior git history regardless of the working-file fix.
 - `frontend/settings.html:25`, `frontend/bulk.html:193`: placeholder text using the same name
 
 Beyond the portability concern already documented in [manual-configurations.md](manual-configurations.md), the fact that the **same hardcoded identity is spelled two different ways across the codebase** is itself a quality signal worth fixing — it suggests copy-paste without a single source of truth even for sample/placeholder content.
