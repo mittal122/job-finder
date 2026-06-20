@@ -46,13 +46,17 @@ router.post('/', async (req, res) => {
       [campaignId, campaignName, validation.valid_rows.length, validation.valid_rows.length, testMode, resumePath]
     );
 
-    // Insert email logs
-    const insertValues = validation.valid_rows.map(row =>
-      `('${uuidv4()}', '${campaignId}', ${sqlStr(row.hr_name)}, '${esc(row.company_name)}', '${esc(row.email)}', ${sqlStr(row.job_role)}, 'PENDING')`
-    ).join(',');
+    // Insert email logs — one parameterized multi-row INSERT, no manual escaping
+    const params = [];
+    const placeholders = validation.valid_rows.map(row => {
+      const base = params.length;
+      params.push(uuidv4(), campaignId, row.hr_name || null, row.company_name, row.email, row.job_role || null, 'PENDING');
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+    }).join(',');
 
     await pool.query(
-      `INSERT INTO email_logs (id, campaign_id, hr_name, company_name, email, job_role, status) VALUES ${insertValues}`
+      `INSERT INTO email_logs (id, campaign_id, hr_name, company_name, email, job_role, status) VALUES ${placeholders}`,
+      params
     );
 
     res.json({
@@ -64,8 +68,5 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-function sqlStr(v) { return v ? `'${esc(v)}'` : 'NULL'; }
-function esc(v) { return String(v || '').replace(/'/g, "''"); }
 
 module.exports = router;
