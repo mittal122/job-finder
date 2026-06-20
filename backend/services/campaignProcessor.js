@@ -4,6 +4,7 @@ const { generateEmail } = require('./aiService');
 const { sendEmail } = require('./emailService');
 const { recordHistory } = require('./historyService');
 const { getSetting } = require('./settingsService');
+const { isSuppressed } = require('./suppressionService');
 
 function randomDelay(min, max) {
   const ms = (Math.floor(Math.random() * (max - min + 1)) + min) * 1000;
@@ -52,6 +53,16 @@ async function processCampaign(campaignId) {
 
   for (let i = 0; i < batch.length; i++) {
     const logEntry = batch[i];
+
+    if (await isSuppressed(logEntry.email)) {
+      await pool.query(
+        `UPDATE email_logs SET status='FAILED', error_message=$1, updated_at=NOW() WHERE id=$2`,
+        ['Recipient has unsubscribed — skipped', logEntry.id]
+      );
+      recordHistory({ source: 'campaign', sessionId: campaignId, email: logEntry.email, company: logEntry.company_name, status: 'FAILED', errorMessage: 'Recipient has unsubscribed — skipped' });
+      await updateCampaignCounts(campaignId);
+      continue;
+    }
 
     // Step 1: Generate email
     let subject, body;

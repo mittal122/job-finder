@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const { personalizeEmail, extractCompany, sleep } = require('../services/bulkAiService');
 const { sendEmail } = require('../services/emailService');
 const { recordHistory } = require('../services/historyService');
+const { isSuppressed } = require('../services/suppressionService');
 const { sendLimiter, uploadLimiter } = require('../middleware/rateLimiter');
 const { isResumeFile } = require('../utils/fileSignature');
 const config = require('../config');
@@ -122,6 +123,9 @@ router.post('/send', sendLimiter, async (req, res) => {
       const it = items[i];
       const row = session.results[i];
       try {
+        if (await isSuppressed(it.email)) {
+          throw new Error('Recipient has unsubscribed — skipped');
+        }
         console.log(`[bulk-send] Sending ${i + 1}/${items.length} to ${it.email}`);
         await sendEmail({ to: it.email, subject: it.subject, body: it.body, resumePath, resumeFilename });
         row.status = 'sent';

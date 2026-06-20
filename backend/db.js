@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const crypto = require('crypto');
 const config = require('./config');
 
 const pool = new Pool({ connectionString: config.databaseUrl });
@@ -92,6 +93,12 @@ CREATE INDEX IF NOT EXISTS idx_send_history_source  ON send_history(source);
 CREATE INDEX IF NOT EXISTS idx_send_history_status  ON send_history(status);
 CREATE INDEX IF NOT EXISTS idx_send_history_email   ON send_history(email);
 CREATE INDEX IF NOT EXISTS idx_send_history_created ON send_history(created_at);
+
+CREATE TABLE IF NOT EXISTS suppressions (
+  email      VARCHAR(255) PRIMARY KEY,
+  reason     VARCHAR(50)  DEFAULT 'unsubscribed',
+  created_at TIMESTAMPTZ  DEFAULT NOW()
+);
 `;
 
 // One-time seed from an env var, only if the setting has no value yet.
@@ -120,6 +127,11 @@ async function initDb() {
   await seedSettingIfEmpty('gmail_app_password', process.env.GMAIL_APP_PASSWORD);
   await seedSettingIfEmpty('email_delay_min',    process.env.EMAIL_DELAY_MIN);
   await seedSettingIfEmpty('email_delay_max',    process.env.EMAIL_DELAY_MAX);
+
+  // Auto-generate a signing secret for unsubscribe links — never asked of
+  // the user, generated once and persisted, exactly the kind of thing
+  // that should never require manual configuration.
+  await seedSettingIfEmpty('unsubscribe_secret', crypto.randomBytes(32).toString('hex'));
 
   console.log('Database schema ready.');
 }

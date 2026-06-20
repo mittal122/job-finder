@@ -2,6 +2,8 @@ const nodemailer = require('nodemailer');
 const path = require('path');
 const { pool } = require('../db');
 const { getSetting } = require('./settingsService');
+const { generateUnsubscribeToken } = require('./suppressionService');
+const config = require('../config');
 
 async function getGmailCredentials() {
   const [address, appPassword] = await Promise.all([
@@ -28,20 +30,27 @@ function createTransporter(address, appPassword) {
   });
 }
 
+async function buildUnsubscribeUrl(to) {
+  const token = await generateUnsubscribeToken(to);
+  return `${config.publicBaseUrl}/api/unsubscribe?email=${encodeURIComponent(to)}&token=${token}`;
+}
+
 async function sendEmail({ to, subject, body, resumePath, resumeFilename }) {
   const { address, appPassword } = await getGmailCredentials();
   const senderName = await getSenderName();
   const transporter = createTransporter(address, appPassword);
+  const unsubscribeUrl = await buildUnsubscribeUrl(to);
 
   // Strip markdown links for plain text version
-  const plainText = stripMarkdown(body);
+  const plainText = `${stripMarkdown(body)}\n\n---\nDon't want these emails? Unsubscribe: ${unsubscribeUrl}`;
 
   const mailOptions = {
     from: senderName ? `"${senderName}" <${address}>` : address,
     to,
     subject,
     text: plainText,
-    html: bodyToHtml(body),
+    html: bodyToHtml(body, unsubscribeUrl),
+    headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
   };
 
   if (resumePath) {
@@ -79,7 +88,7 @@ function esc(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function bodyToHtml(text) {
+function bodyToHtml(text, unsubscribeUrl) {
   // Strip markdown links → convert to plain clickable links
   const cleaned = text
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" style="color:#4a6cf7">$1</a>')
@@ -95,7 +104,11 @@ function bodyToHtml(text) {
     })
     .join('');
 
-  return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:580px;padding:0">${html}</div>`;
+  const footer = unsubscribeUrl
+    ? `<p style="margin:20px 0 0;padding-top:12px;border-top:1px solid #e5e5e5;font-size:12px;color:#999">Don't want these emails? <a href="${unsubscribeUrl}" style="color:#999">Unsubscribe</a></p>`
+    : '';
+
+  return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:580px;padding:0">${html}${footer}</div>`;
 }
 
 module.exports = { sendEmail, sendTestEmail };

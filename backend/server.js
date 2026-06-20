@@ -17,6 +17,7 @@ const logsRoutes    = require('./routes/logs');
 const bulkRoutes        = require('./routes/bulk');
 const templateMapRoutes = require('./routes/template-map');
 const historyRoutes     = require('./routes/history');
+const unsubscribeRoutes = require('./routes/unsubscribe');
 const { apiNotFound, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/api/logs',      logsRoutes);
 app.use('/api/bulk',         bulkRoutes);
 app.use('/api/template-map', templateMapRoutes);
 app.use('/api/history',      historyRoutes);
+app.use('/api/unsubscribe',  unsubscribeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
