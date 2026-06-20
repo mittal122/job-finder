@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const { getSetting } = require('../routes/settings');
+const { getSetting } = require('./settingsService');
 
 async function getClient() {
   const apiKey = await getSetting('nvidia_api_key');

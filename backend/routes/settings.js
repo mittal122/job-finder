@@ -1,11 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
-
-async function getSetting(key) {
-  const { rows } = await pool.query('SELECT value FROM app_settings WHERE key=$1', [key]);
-  return rows[0]?.value || '';
-}
+const { getSetting, setSetting } = require('../services/settingsService');
 
 // GET /api/settings
 router.get('/', async (req, res) => {
@@ -25,15 +20,11 @@ router.put('/', async (req, res) => {
     return res.status(400).json({ error: 'nvidia_api_key is required' });
   }
   try {
-    await pool.query(
-      `INSERT INTO app_settings (key, value) VALUES ('nvidia_api_key', $1)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [nvidia_api_key.trim()]
-    );
+    await setSetting('nvidia_api_key', nvidia_api_key.trim());
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-module.exports = { router, getSetting };
+module.exports = { router };
