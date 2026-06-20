@@ -13,6 +13,7 @@
     <div class="topbar" id="topbar"></div>
     <div class="page" id="page">
       <div id="msg"></div>
+      <div id="setup-banner"></div>
 
       <!-- Stats -->
       <div class="stats-grid" id="stats-grid">
@@ -43,6 +44,21 @@
 <script src="/js/layout.js"></script>
 <script>
 buildLayout('Dashboard');
+
+async function checkSetup() {
+  try {
+    const settings = await fetch('/api/settings').then(r => r.json());
+    if (!settings.gmail.address || !settings.gmail.appPasswordConfigured) {
+      qs('#setup-banner').innerHTML = `
+        <div class="alert alert-warn flex items-center justify-between gap-12">
+          <span>Gmail isn't configured yet — sending will fail until you add your address and App Password.</span>
+          <a href="/settings.html" class="btn btn-primary btn-sm" style="flex-shrink:0">Finish Setup</a>
+        </div>`;
+    }
+  } catch (err) {
+    console.error('Failed to check setup status', err);
+  }
+}
 
 async function loadDashboard() {
   try {
@@ -87,6 +103,7 @@ async function loadDashboard() {
   }
 }
 
+checkSetup();
 loadDashboard();
 // Auto-refresh every 15 seconds if any campaign is processing
 setInterval(async () => {
