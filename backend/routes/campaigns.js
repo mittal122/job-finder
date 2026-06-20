@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { processCampaign, retryFailed } = require('../services/campaignProcessor');
+const { sendLimiter } = require('../middleware/rateLimiter');
 
 // GET /api/campaigns — list all with stats
 router.get('/', async (req, res) => {
@@ -45,7 +46,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/campaigns/:id/start — launch processing (async, fire-and-forget)
-router.post('/:id/start', async (req, res) => {
+router.post('/:id/start', sendLimiter, async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query('SELECT status FROM campaigns WHERE id=$1', [id]);
@@ -65,7 +66,7 @@ router.post('/:id/start', async (req, res) => {
 });
 
 // POST /api/campaigns/:id/retry — retry failed emails
-router.post('/:id/retry', async (req, res) => {
+router.post('/:id/retry', sendLimiter, async (req, res) => {
   const { id } = req.params;
   const { email_ids } = req.body || {};
   try {

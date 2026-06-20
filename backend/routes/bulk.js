@@ -6,8 +6,10 @@ const { randomUUID } = require('crypto');
 const { personalizeEmail, extractCompany, sleep } = require('../services/bulkAiService');
 const { sendEmail } = require('../services/emailService');
 const { recordHistory } = require('../services/historyService');
+const { sendLimiter, uploadLimiter } = require('../middleware/rateLimiter');
+const config = require('../config');
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/jobfinder_uploads';
+const UPLOAD_DIR = config.uploadDir;
 
 // In-memory sessions
 const sessions = new Map();
@@ -20,7 +22,7 @@ function broadcast(session, payload) {
 }
 
 // POST /api/bulk/generate — JSON body
-router.post('/generate', async (req, res) => {
+router.post('/generate', uploadLimiter, async (req, res) => {
   const { emails, subject, template } = req.body;
   if (!Array.isArray(emails) || !emails.length) return res.status(400).json({ error: 'emails array required' });
   if (!template?.trim()) return res.status(400).json({ error: 'template required' });
@@ -46,7 +48,7 @@ router.post('/generate', async (req, res) => {
 
 // POST /api/bulk/send — multipart/form-data
 // Fields: items (JSON string), resume (optional file)
-router.post('/send', async (req, res) => {
+router.post('/send', sendLimiter, async (req, res) => {
   let items;
   try {
     items = JSON.parse(req.body.items || '[]');

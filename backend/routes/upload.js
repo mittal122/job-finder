@@ -7,12 +7,13 @@ const router = express.Router();
 const { pool } = require('../db');
 const { parseAndValidate } = require('../services/excelService');
 const config = require('../config');
+const { uploadLimiter } = require('../middleware/rateLimiter');
 
 // Ensure upload dir exists
 fs.mkdirSync(config.uploadDir, { recursive: true });
 
 // POST /api/upload  — multipart form: excel file + optional resume + campaign name
-router.post('/', async (req, res) => {
+router.post('/', uploadLimiter, async (req, res) => {
   try {
     if (!req.files || !req.files.excel) {
       return res.status(400).json({ error: 'No Excel file uploaded. Field name must be "excel".' });

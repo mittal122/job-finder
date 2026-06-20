@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const XLSX = require('xlsx');
 const { pool } = require('../db');
+const { uploadLimiter } = require('../middleware/rateLimiter');
 
 // ── POST /api/template-map/parse ─────────────────────────────────────────────
 // Upload Excel → returns columns + all rows + 5-row preview
-router.post('/parse', (req, res) => {
+router.post('/parse', uploadLimiter, (req, res) => {
   const file = req.files?.excel;
   if (!file) return res.status(400).json({ error: 'No Excel file uploaded' });
 
