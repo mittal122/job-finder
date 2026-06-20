@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-06-20 — Zero Manual Code Changes
+
+A fresh clone now needs zero file edits to reach a usable state: `cp .env.example .env && docker compose up -d` starts the app with no required values beyond Postgres defaults that already work as-is, and everything else is configured from inside the running app.
+
+### Changed
+- **Gmail credentials and Campaign send-delay range** moved from a hard `.env` requirement into DB-backed settings (`app_settings`, the same mechanism already used for the NVIDIA key), editable from Settings → Email Sending. `.env` variables for these now only act as an optional one-time seed for headless deployments, never a hard requirement.
+- **Fixed the env-overwrites-saved-setting bug**: `db.js` previously re-seeded the NVIDIA key from `.env` unconditionally on every boot, silently discarding anything saved through the UI. `seedSettingIfEmpty()` now seeds only if the setting has no value yet, applied uniformly across all five DB-backed settings. Verified by setting a value via the API, restarting, and confirming it persisted.
+- **Sender display name** in outgoing email now comes from your Profile's Full Name field automatically, instead of a dead `config.gmailSenderName` reference that was never defined anywhere and always fell back to a hardcoded stranger's name regardless of who configured the app.
+- **`UPLOAD_DIR`** now auto-detects via `os.tmpdir()` instead of a hardcoded `/tmp` path — identical behavior under Docker, but no longer broken if ever run natively on Windows.
+- **`JobFinder.desktop`** is now self-healing: `start.sh` regenerates its `Exec=` path on every run, so cloning to any location works without hand-editing the file. Verified by deliberately corrupting the path and confirming it repairs itself.
+- Removed the hardcoded personal-name defaults in `db.js`'s schema and `campaignProcessor.js`'s fallback profile — an unconfigured profile now stays honestly empty instead of silently impersonating the original developer.
+- Rewrote `.env.example` and `SETUP.md`, which (despite being flagged as inaccurate in the original Prompt 1 audit) still named the wrong AI-provider variable until now — corrected, and restructured around "what's actually required to start" vs. "what's configured in-app."
+
+### Added
+- `/api/settings` GET/PUT now covers Gmail credentials (masked app password), the NVIDIA key, and the send-delay range in one contract, replacing the NVIDIA-only-shaped response.
+- `POST /api/settings/test-email` — sends a real verification email using whatever is currently typed in the Settings form, so credentials can be confirmed before saving rather than discovered broken mid-campaign.
+- A Dashboard banner that appears only when Gmail isn't configured yet, linking straight to Settings.
+
+### Deliberately left manual, with justification
+- `DATABASE_URL`/`POSTGRES_*` — the app stores its own configuration in Postgres, so it can't look up how to reach Postgres from Postgres. Has working defaults; no edit needed unless using a non-default database.
+- `PORT` — must be known before the process can bind a socket to serve anything, including the UI that would otherwise configure it. Has a working default.
+
+See `docs/manual-configurations.md` for the full current picture, and `docs/refactoring-roadmap.md` for what's still ahead (authentication, encrypted secret storage, durable job processing for Bulk Send/Template Map).
+
 ## 2026-06-20 — Repository cleanup & architecture refactoring (Prompt 2)
 
 A full audit (see `docs/`) was completed first with no code changes; this phase implements the cheap, low-risk fixes it identified, with functionality kept identical throughout — verified after every change via a running instance, never just by reading the diff.

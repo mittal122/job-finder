@@ -13,13 +13,13 @@ AI-assisted bulk email outreach tool. Upload a recruiter list (or paste emails d
 ## Quick start
 
 ```bash
-cp .env.example .env   # fill in your Gmail App Password (see SETUP.md)
+cp .env.example .env
 docker compose up -d
 ```
 
-Open **http://localhost:8000**.
+Open **http://localhost:8000** and finish setup from inside the app — go to **Profile & Settings** to add your Gmail address and App Password (the page links you straight to where to get one). No file editing required.
 
-See [SETUP.md](SETUP.md) for full setup instructions (environment variables, where to get a Gmail App Password and an NVIDIA API key, running without Docker, Excel file format).
+See [SETUP.md](SETUP.md) for full setup instructions (where to get a Gmail App Password and an NVIDIA API key, running without Docker, Excel file format).
 
 ## Project structure
 

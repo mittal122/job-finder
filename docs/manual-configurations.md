@@ -1,88 +1,45 @@
-# Manual Configurations — Full Inventory
+# Manual Configurations
 
-This is the complete list of every value a new developer or operator must set by hand today, gathered from a full read of every file in the repository. It is the direct input into the future Setup Wizard (see [refactoring-roadmap.md](refactoring-roadmap.md) Phase 2) — everything in this list is a candidate to move from "manual file edit" to "filled in through a UI on first run."
+This document reflects the **current** state of what requires manual setup, as of the "Zero Manual Code Changes" pass (see `CHANGELOG.md`). It superseded an earlier version of this same document written during the initial Prompt 1 audit, when almost everything below was still a `.env` edit or a hardcoded value — that history is preserved in `CHANGELOG.md` and git history rather than duplicated here.
 
-## Critical: documentation/code mismatch on the AI key
+## What's still genuinely manual, and why
 
-| File | Says the var is | Reality |
+| Item | Where | Why it can't be eliminated |
 |---|---|---|
-| `.env.example:8` | `GEMINI_API_KEY` | **Wrong** |
-| `SETUP.md:22` | `OPENAI_API_KEY` | **Wrong** |
-| `backend/config.js:7`, `backend/db.js:82` | — | `NVIDIA_API_KEY` is what's actually read |
+| `DATABASE_URL` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `.env` | Chicken-and-egg: the app stores its configuration in Postgres, so it can't also look up *how to reach Postgres* from Postgres. This is the one setting that has to exist before the app can start at all. Docker Compose's defaults work as-is; only override if running your own Postgres instance. |
+| `PORT` (optional) | `.env` | The process has to know which port to bind before it can serve any UI to configure anything through. Has a working default (`8000`) — only set this if that port is taken. |
 
-Three files, three different names, for one variable. Any new developer who follows either doc verbatim sets a value the code never reads, then hits a confusing runtime failure ("NVIDIA API key not configured") with no clue why. This must be fixed as a near-zero-risk, immediate documentation correction regardless of when the larger roadmap begins.
+That's the complete list of things that must be set before the app starts, and both have sensible defaults that work out of the box with `docker compose up -d` — a fresh clone needs zero `.env` edits to start successfully.
 
-## Environment variables (`.env`)
+## Everything else is configured from inside the running app
 
-| Variable | Read at | Purpose | Mandatory | Notes |
-|---|---|---|---|---|
-| `DATABASE_URL` | `config.js:5` | Postgres connection | Yes | Default points at `localhost` — fine for bare-metal, overridden by Docker Compose |
-| `POSTGRES_USER`/`PASSWORD`/`DB` | `docker-compose.yml:7-9` | Container init | Yes, if using Docker | |
-| `NVIDIA_API_KEY` | `db.js:82` → seeds `app_settings` | AI personalization (Bulk Send/Template Map only, conditionally) | Yes, for that feature only | **Overwrites whatever was saved via the Settings UI, every restart** — see below |
-| `GMAIL_ADDRESS` | `config.js:8` | SMTP auth + From address | Yes | |
-| `GMAIL_APP_PASSWORD` | `config.js:9` | SMTP auth | Yes | Requires Google 2FA enabled first |
-| `EMAIL_DELAY_MIN`/`MAX` | `config.js:11-12` | Campaign-flow only inter-email delay | Optional | Defaults 30/60s. Bulk Send/Template Map have their own UI-configurable delay instead |
-| `PORT` | `config.js:4` | Listen port | Optional | Default 8000 |
-| `UPLOAD_DIR` | `config.js:10`, `bulk.js:9` | Temp resume storage | Optional | Default `/tmp/jobfinder_uploads` — **breaks on native Windows without Docker** |
-| `REDIS_URL` | `config.js:6` | — | N/A | **Dead.** Never read anywhere else. Remove or wire up for real. |
+All of the following are stored in the `app_settings` database table (or `candidate_profiles` for profile data) and edited through `/settings.html`. None require touching a file:
 
-## The NVIDIA-key dual-source-of-truth footgun
-
-`db.js:77-91`'s `initDb()` runs this on **every server boot**:
-```js
-const envKey = process.env.NVIDIA_API_KEY || '';
-if (envKey) {
-  await pool.query(`INSERT INTO app_settings ... ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [envKey]);
-}
-```
-If you set the key via the Settings page (`frontend/settings.html`'s "API Settings" card) **and** have `NVIDIA_API_KEY` in `.env`, the `.env` value silently wins on every restart, discarding whatever was typed into the UI. Document this explicitly until a future phase makes one of the two the single source of truth (recommendation: env var becomes "initial seed only," and the Settings UI value, once set, should not be clobbered — see roadmap).
-
-## Third-party credentials / services
-
-| Service | Used for | Mandatory | How to obtain |
-|---|---|---|---|
-| Gmail App Password | All outbound email (SMTP, hardcoded to `smtp.gmail.com:587` in `emailService.js:7-8`) | Yes | 2FA on the Gmail account, then https://myaccount.google.com/apppasswords |
-| NVIDIA NIM API key | AI company-name substitution (`build.nvidia.com`, model `meta/llama-3.3-70b-instruct`) | Only for that one feature | Free account at https://build.nvidia.com |
-
-No AWS/GCP/Azure, no OAuth, no webhooks, no Slack/Discord integration exist anywhere in the codebase — confirmed by full read.
-
-## Local file paths that must be hand-edited
-
-| File | Line | Issue |
+| Setting | Where in the UI | Required? |
 |---|---|---|
-| `JobFinder.desktop:6` | `Exec=bash -c 'cd "/media/sun/drive/devops project/job finder" && bash start.sh'` | Absolute path hardcoded to the original developer's machine/mount point. Must be edited (or regenerated) for any other clone location. |
+| Gmail address + App Password | Settings → Email Sending | Yes — nothing can be sent until this is set. The Dashboard shows a banner linking here if it's missing. |
+| Campaign send-delay range | Settings → Sending Pace | No — defaults to 30–60s |
+| NVIDIA API key | Settings → AI Personalization | No — only used by Bulk Send/Template Map, and only when a template needs AI-based company-name substitution |
+| Full name, email, phone, links, bio, skills, projects | Settings → Personal Information/Bio/Skills/Projects | Only required if using the Campaign flow, which uses the Bio field as its email template |
 
-## Hardcoded identity/content values that should not ship as defaults
+A **Send Test Email** button on the Email Sending card lets you verify Gmail credentials work before saving them, rather than discovering a typo only when a real campaign fails partway through.
 
-| Value | Location(s) | Why it matters |
-|---|---|---|
-| `'Mittal Domadiya'` | `emailService.js:24` (always used — see below) | **Bug, not just placeholder**: `config.gmailSenderName` is referenced here but never defined anywhere in `config.js`, so this hardcoded fallback is *always* what recipients see as the sender name, regardless of what the user sets in their Profile. |
-| `'Mittal Domaidya'` (different spelling) | `db.js:11` (schema default), `campaignProcessor.js:15` (fallback profile) | Cosmetic until Profile is filled in, but two different misspellings of the same hardcoded name exist simultaneously in the codebase. |
-| Full sample bio (name, CHARUSAT, B.Tech CS, **real phone number, real personal Gmail address**) | `frontend/template-map.html:173,195` (original audit) — **fixed in the Prompt 2 cleanup pass, replaced with generic `[Your Name]`/`[Your University]`-style placeholders; see CHANGELOG.md** | This was **real personal content and real contact details**, not a generic placeholder. Note: replacing the working file does not remove this data from prior git history/commits already pushed to the remote — that's a separate decision (history rewrite or making the repo private) the project owner should make deliberately, not something done automatically as part of a cleanup pass. |
-| Placeholder text only (no risk) | `frontend/settings.html:25`, `frontend/bulk.html:193` | Cosmetic `placeholder=` attributes — never submitted as data. |
+## Optional env-var seeding, for headless/scripted deployments
 
-## First-run application configuration (not files — done through the running app's UI)
+`.env.example` documents `GMAIL_ADDRESS`/`GMAIL_APP_PASSWORD`/`NVIDIA_API_KEY`/`EMAIL_DELAY_MIN`/`EMAIL_DELAY_MAX` as commented-out, optional variables. If set, `db.js`'s `seedSettingIfEmpty()` uses them to pre-populate the matching Settings value **the first time the app starts with an empty value for that setting** — and never again after that. This means:
+- A scripted/CI deployment can pre-seed everything via `.env` and skip the UI entirely.
+- A value set through the Settings UI is never silently overwritten by `.env` on a later restart — this was a real bug in an earlier version of this app (see `CHANGELOG.md`) and is now fixed for all five seedable settings.
 
-These aren't config files, but they are mandatory manual steps before the app is usable for real, and are exactly the kind of thing a Setup Wizard should walk a new user through directly instead of leaving as "go find the right page":
+## Things that used to require a manual edit and no longer do
 
-1. `/settings.html` → **Personal Information / Professional Links / Bio / Skills / Projects** — replace all "Mittal Domaidya/Domadiya" defaults with the operator's real information. The Bio field is used verbatim as the AI email template for the Campaign flow (`aiService.js:21-22` throws an error if it's empty), so this is not optional if the Campaign flow will be used.
-2. `/settings.html` → **API Settings** card — paste the NVIDIA key here *if* not set via `.env` (remember the overwrite behavior above).
-3. `/template-map.html` → replace the default sample bio/template text before using this flow for real sends.
+- **Gmail credentials** — previously a hard `.env` requirement; now optional env-seeding only, with the real configuration path being the Settings UI.
+- **Campaign send-delay range** — same change.
+- **Sender display name in outgoing email** — previously a dead `config.gmailSenderName` reference that silently fell back to a hardcoded stranger's name no matter what; now derived automatically from your Profile's Full Name field. Filling in your name once (which you'd do anyway, for the AI email template) fixes this with no separate input.
+- **Upload directory** — previously hardcoded to a Unix-only `/tmp` path that broke if ever run natively on Windows without Docker; now auto-detected via `os.tmpdir()`.
+- **`JobFinder.desktop`'s launcher path** — previously a static file with one machine's absolute path baked in, requiring a hand-edit on every other clone; `start.sh` now regenerates it correctly on every run.
+- **Default identity content** (a hardcoded name baked into the database schema, the Campaign processor's fallback profile, and Template Map's sample email template, including — in the sample template's case — a real phone number and personal Gmail address) — all replaced with neutral/generic placeholders. An unconfigured profile now honestly looks unconfigured instead of silently impersonating the original developer.
 
-## Ports / hosts
+## Remaining known gaps (tracked, not silently ignored)
 
-| Item | Value | Source | Notes |
-|---|---|---|---|
-| Backend HTTP | `8000` | `config.js:4` | Frontend is served from the same origin — no separate frontend URL to configure |
-| Postgres | `5432` | `docker-compose.yml:11` | |
-| Frontend → backend base URL | `window.location.origin + '/api'` (`api.js:2`) | Already relative — no hardcoded host anywhere on the frontend, good |
-
-## Things that need no manual setup
-
-- DB schema — auto-applied on every boot via `initDb()`.
-- `.env` is correctly gitignored; confirmed via `git ls-files` that it's never been committed.
-- No CI/CD config exists to configure (none is present at all — see [folder-structure.md](folder-structure.md)).
-
-## Setup-Wizard implication
-
-Every row in this document that is a *value* (not a doc-correction or a code-bug) is a literal candidate field for the future setup wizard described in the project vision: Gmail address + app password, NVIDIA key, candidate profile basics, and a one-time confirmation that the default template-map sample content has been replaced. The wizard's job is to make every one of these the *only* place a human ever has to type them — see [refactoring-roadmap.md](refactoring-roadmap.md) Phase 2 for the concrete plan.
+- Secrets in `app_settings` (Gmail App Password, NVIDIA key) are stored in plaintext, not encrypted at rest — acceptable for a single-operator local/Docker deployment, flagged in `docs/security-audit.md` as needing real encryption before any multi-tenant/hosted deployment (`docs/refactoring-roadmap.md` Phase 7).
+- No authentication exists yet, so "configured through the app" still means "configured by whoever can reach the app" — see `docs/security-audit.md` for the full security posture and `docs/refactoring-roadmap.md` Phase 3 for the planned fix.
