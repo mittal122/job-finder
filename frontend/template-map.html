@@ -321,7 +321,7 @@ Best Regards,
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
             <h3 style="font-size:14px;font-weight:600;margin:0">Sending Progress</h3>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span id="send-lbl" style="font-size:13px;color:var(--text-muted)"></span>
+              <span id="send-status-label" style="font-size:13px;color:var(--text-muted)"></span>
               <button id="refresh-btn" class="btn btn-ghost btn-sm" onclick="refreshProgress()" title="Refresh status">↻ Refresh</button>
               <button id="stop-btn" class="btn btn-sm" style="background:#e74c3c;color:#fff;border:none" onclick="stopSending()">⏹ Stop</button>
             </div>
@@ -337,12 +337,12 @@ Best Regards,
           </div>
 
           <div class="stats-bar">
-            <div class="stat-card s-total"><div class="stat-num" id="st-total">0</div><div class="stat-lbl">Total</div></div>
-            <div class="stat-card s-sent"><div class="stat-num" id="st-sent">0</div><div class="stat-lbl">Sent</div></div>
-            <div class="stat-card s-failed"><div class="stat-num" id="st-failed">0</div><div class="stat-lbl">Failed</div></div>
-            <div class="stat-card s-pend"><div class="stat-num" id="st-pend">0</div><div class="stat-lbl">Pending</div></div>
+            <div class="stat-card s-total"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">Total</div></div>
+            <div class="stat-card s-sent"><div class="stat-num" id="stat-sent">0</div><div class="stat-lbl">Sent</div></div>
+            <div class="stat-card s-failed"><div class="stat-num" id="stat-failed">0</div><div class="stat-lbl">Failed</div></div>
+            <div class="stat-card s-pend"><div class="stat-num" id="stat-pending">0</div><div class="stat-lbl">Pending</div></div>
           </div>
-          <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+          <div class="prog-wrap"><div class="prog-fill" id="progress-fill"></div></div>
           <table style="width:100%;border-collapse:collapse;font-size:13px">
             <thead>
               <tr style="border-bottom:1px solid var(--border);text-align:left">
@@ -364,6 +364,7 @@ Best Regards,
 
 <script src="/js/api.js"></script>
 <script src="/js/layout.js"></script>
+<script src="/js/sendProgress.js"></script>
 <script>
 buildLayout('Template Mapping');
 
@@ -682,9 +683,9 @@ async function startSend() {
     setStep(3);
     qs('#s3-section').classList.remove('section-hidden');
     qs('#s3-section').scrollIntoView({ behavior:'smooth', block:'start' });
-    initProgTable(items);
+    initProgressTable(items);
     updateStats(items.length, 0, 0);
-    connectProgress(sessionId, items.length);
+    connectProgress(sessionId);
   } catch (err) {
     showAlert(qs('#global-msg'), 'error', 'Send failed: ' + err.message);
     btn.disabled = false; btn.textContent = 'Send All Emails';
@@ -692,7 +693,7 @@ async function startSend() {
 }
 
 // ── Progress ──────────────────────────────────────────────────────────────────
-function initProgTable(items) {
+function initProgressTable(items) {
   qs('#prog-table').innerHTML = items.map((it, i) => `
     <tr id="prog-row-${i}" style="border-bottom:1px solid var(--border)">
       <td style="padding:8px 10px;color:var(--text-muted)">${i+1}</td>
@@ -703,104 +704,13 @@ function initProgTable(items) {
     </tr>`).join('');
 }
 
-function updateStats(total, sent, failed) {
-  const pend = total - sent - failed;
-  qs('#st-total').textContent  = total;
-  qs('#st-sent').textContent   = sent;
-  qs('#st-failed').textContent = failed;
-  qs('#st-pend').textContent   = pend;
-  const pct = total > 0 ? Math.round(((sent+failed)/total)*100) : 0;
-  qs('#prog-fill').style.width = pct + '%';
-}
-
-function updateProgRow(index, row) {
+function updateRow(index, row) {
   const st = qs(`#prog-st-${index}`);
   const t  = qs(`#prog-t-${index}`);
   if (!st) return;
   const cls = row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'pending';
   st.innerHTML = `<span class="status-pill ${cls}">${row.status}</span>${row.error ? `<div style="font-size:11px;color:#e74c3c;margin-top:2px">${escHtml(row.error)}</div>` : ''}`;
   if (t) t.textContent = row.sentAt ? new Date(row.sentAt).toLocaleTimeString() : '—';
-}
-
-let breakTimer = null;
-let activeSessionId = null;
-let activeEs = null;
-
-function connectProgress(sessionId, total) {
-  activeSessionId = sessionId;
-  if (activeEs) activeEs.close();
-  const es = new EventSource(`/api/bulk/progress/${sessionId}`);
-  activeEs = es;
-  es.onmessage = e => {
-    const d = JSON.parse(e.data);
-    if (d.type === 'init') {
-      d.results.forEach((r, i) => updateProgRow(i, r));
-      updateStats(d.total, d.sent, d.failed);
-      if (d.status === 'done')    finish(d, es);
-      if (d.status === 'stopped') handleStopped(d, es);
-    }
-    if (d.type === 'update') {
-      updateProgRow(d.index, d.row);
-      updateStats(d.total, d.sent, d.failed);
-      qs('#send-lbl').textContent = `${d.sent + d.failed} / ${d.total} processed…`;
-    }
-    if (d.type === 'break')      startBreakBanner(d);
-    if (d.type === 'break-done') stopBreakBanner();
-    if (d.type === 'done')    { stopBreakBanner(); finish(d, es); }
-    if (d.type === 'stopped') { stopBreakBanner(); handleStopped(d, es); }
-  };
-  es.onerror = () => es.close();
-}
-
-async function stopSending() {
-  if (!activeSessionId) return;
-  const btn = qs('#stop-btn');
-  btn.disabled = true; btn.textContent = 'Stopping…';
-  try { await fetch(`/api/bulk/stop/${activeSessionId}`, { method: 'POST' }); } catch {}
-}
-
-function refreshProgress() {
-  if (!activeSessionId) return;
-  if (activeEs) activeEs.close();
-  connectProgress(activeSessionId, null);
-}
-
-function startBreakBanner(data) {
-  const banner = qs('#break-banner');
-  banner.style.display = 'flex';
-  qs('#break-title').textContent = `Batch ${data.batchNum} done — taking a break`;
-  const until = new Date(data.breakUntil);
-  if (breakTimer) clearInterval(breakTimer);
-  breakTimer = setInterval(() => {
-    const sec = Math.max(0, Math.round((until - Date.now()) / 1000));
-    const m = String(Math.floor(sec / 60)).padStart(2, '0');
-    const s = String(sec % 60).padStart(2, '0');
-    qs('#break-countdown').textContent = `${m}:${s}`;
-    qs('#break-sub').textContent = sec > 0 ? `Resuming in ${m}:${s}` : 'Resuming…';
-    if (sec === 0) stopBreakBanner();
-  }, 500);
-}
-
-function stopBreakBanner() {
-  if (breakTimer) { clearInterval(breakTimer); breakTimer = null; }
-  const b = qs('#break-banner');
-  if (b) b.style.display = 'none';
-}
-
-function finish(d, es) {
-  es.close();
-  qs('#send-lbl').textContent = `Complete — ${d.sent} sent, ${d.failed} failed.`;
-  qs('#stop-btn').style.display = 'none';
-  qs('#send-btn').textContent = 'Send Complete';
-  if (d.failed === 0) qs('#prog-fill').style.background = '#27ae60';
-}
-
-function handleStopped(d, es) {
-  es.close();
-  qs('#send-lbl').textContent = `Stopped — ${d.sent} sent, ${d.failed} failed.`;
-  qs('#stop-btn').style.display = 'none';
-  qs('#send-btn').textContent = 'Stopped';
-  qs('#prog-fill').style.background = '#e74c3c';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
