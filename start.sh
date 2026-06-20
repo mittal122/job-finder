@@ -5,6 +5,23 @@
 
 cd "$(dirname "$0")"
 
+# ── Keep the desktop launcher pointed at wherever this repo actually is ──
+# Regenerated every run so cloning to any path works without ever hand-editing
+# JobFinder.desktop's Exec= line.
+cat > JobFinder.desktop <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Job Finder
+Comment=Start the Job Finder bulk email app
+Exec=bash -c 'cd "$(pwd)" && bash start.sh'
+Icon=applications-internet
+Terminal=true
+Categories=Application;Network;
+StartupNotify=false
+EOF
+chmod +x JobFinder.desktop
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║        Job Finder — Starting...          ║"
