@@ -8,7 +8,9 @@ AI-assisted bulk email outreach tool. Upload a recruiter list (or paste emails d
 - **Bulk Send** — paste a list of emails directly, compose a template, optionally let an LLM swap in each recipient's company name, control delay/batch-size/break timing, stop or refresh mid-send.
 - **Template Map** — upload an Excel file and map `{{placeholder}}` tokens to columns for full control over per-recipient personalization, with saveable mapping presets.
 - **History** — a single place to search and filter every email ever sent, across all three flows above.
-- **Profile & Settings** — your bio/skills/projects (used as the email template for Campaigns) and your NVIDIA API key (used for AI personalization in Bulk Send/Template Map).
+- **Profile & Settings** — your bio/skills/projects (used as the email template for Campaigns), Gmail address/App Password with a one-click test send, your NVIDIA API key (used for AI personalization in Bulk Send/Template Map), and your Campaign send-pace.
+- **Unsubscribe & suppression** — every outgoing email carries a working, signed unsubscribe link (plus a native one-click `List-Unsubscribe` header in Gmail/Outlook); anyone who unsubscribes is automatically skipped by every future send across all three flows.
+- **Getting Started checklist** — the Dashboard guides a new user through connecting Gmail, filling in their profile, and sending their first email, then gets out of the way once all three are done.
 
 ## Quick start
 

@@ -2,6 +2,8 @@
 
 Each score is 1–10 and reflects current state only, judged against the stated goal of a production-grade, multi-user SaaS product. Evidence references point to the relevant audit doc.
 
+> **Status update:** the scores and reasoning below are from the original Prompt 1 audit and are left as a historical snapshot. Since then, the zero-manual-config pass and the professional-polish/hardening pass (see `CHANGELOG.md`) have meaningfully moved several of these: **Security 3→5** (SQL injection, rate limiting, upload validation, and unsubscribe/compliance fixed; auth/CORS/secret-encryption remain the open items keeping this from going higher), **Maintainability 4→6** and **Code Quality 4→6** (duplication, dead CSS, the settings-layering bug, and the sender-name bug all fixed), **Documentation 3→7** (README/CHANGELOG/SETUP rewritten, CLAUDE.md corrected — a LICENSE decision is the main remaining gap), **Deployment 5→6** (launcher self-heals now), **UX 5→6** (Settings consolidated with a working test-email button, a real Getting Started checklist, favicon/branding — `preview.html`'s generate/send confusion is still unresolved). **Architecture (4), Scalability (2), and Performance (5) are unchanged** — none of that work touched the three-pipeline structure, the lack of a queue, or the polling/pagination patterns.
+
 | Dimension | Score | Trend driver |
 |---|---|---|
 | Architecture | **4/10** | Three parallel send pipelines for one feature; no auth layer; two of three pipelines are not durable |

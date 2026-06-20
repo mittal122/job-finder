@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-06-20 — Transform into a professional SaaS product
+
+A professional-polish and reliability/security-hardening pass within the app's existing single-operator architecture. Authentication and multi-tenancy remain deliberately out of scope here — they're large, multi-session structural changes the project's own roadmap already sequences into dedicated later phases, and attempting them incompletely in this pass would risk leaving the project partially working, which this phase's brief explicitly ruled out.
+
+### Added
+- **Unsubscribe links + a suppression list**, across all three send flows. Every outgoing email now carries a signed, per-recipient unsubscribe link (text and HTML body) plus a `List-Unsubscribe` header so Gmail/Outlook show their native one-click unsubscribe UI. The signing secret is auto-generated on first boot and never asked of the user. A suppressed recipient is skipped before AI generation even runs, recorded with a clear reason rather than a generic failure. Verified end-to-end with zero real emails sent, using all-suppressed recipient batches so the actual send call was never reached.
+- **Rate limiting** on every endpoint that triggers a real send, AI call, or file upload, via `express-rate-limit` — protects the configured Gmail account and AI API budget from a runaway script or bug. Verified via response headers showing real request counting.
+- **Magic-byte file validation** on Excel and resume uploads — content is now checked against the actual file format, not just the client-supplied extension. CSV (which has no reliable binary signature) is deliberately left to the existing parser-based validation. Verified with six scenarios: valid/invalid Excel, valid/invalid resume, and the CSV carve-out.
+- **A favicon and meta description**, applied across all 10 pages — no visual branding existed before this.
+- **A real Getting Started checklist** on the Dashboard (connect Gmail, fill in profile, send a first email), replacing a banner that only ever nagged about one thing and never went away. Disappears entirely once all three steps are done.
+
+### Fixed
+- **nodemailer and uuid upgraded** to resolve known CVEs (nodemailer carried several high-severity advisories including SMTP command injection; uuid had a moderate buffer-bounds issue) — both previously flagged and deliberately deferred pending a safe way to verify a major-version bump. Verified using `transporter.verify()` (a real SMTP login handshake that sends zero messages) against the actual configured Gmail account, plus a full upload/campaign smoke test.
+- An inconsistency in `routes/bulk.js`, which read `UPLOAD_DIR` directly from `process.env` with its own separate hardcoded fallback, bypassing `config.js`'s auto-detection entirely — found while adding rate limiting to the same file.
+
+### Known, deliberately out of scope
+- Authentication/authorization, durable job processing for Bulk Send/Template Map, and full multi-tenancy remain on `docs/refactoring-roadmap.md` as dedicated future phases — see that document for why these specifically need isolated treatment rather than being folded into a polish pass.
+- `xlsx`'s prototype-pollution/ReDoS advisories still have no fix available from the maintainer.
+- Secrets in `app_settings` (Gmail App Password, NVIDIA key, the new unsubscribe-signing secret) are still stored in plaintext, not encrypted at rest — tracked in `docs/security-audit.md` finding #10.
+
 ## 2026-06-20 — Zero Manual Code Changes
 
 A fresh clone now needs zero file edits to reach a usable state: `cp .env.example .env && docker compose up -d` starts the app with no required values beyond Postgres defaults that already work as-is, and everything else is configured from inside the running app.
