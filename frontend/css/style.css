@@ -18,6 +18,14 @@
   --purple:    #8957e5;
   --radius:    8px;
   --shadow:    0 1px 3px rgba(0,0,0,.4);
+
+  /* Aliases used by bulk.html/template-map.html — kept as aliases of the
+     palette above so there is one source of truth for each color. */
+  --primary:     var(--blue);
+  --primary-dim: #21305e;
+  --text-muted:  var(--muted);
+  --card-bg:     var(--surface);
+  --input-bg:    var(--surface2);
 }
 
 body {
