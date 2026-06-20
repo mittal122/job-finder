@@ -15,7 +15,7 @@
     <div class="topbar" id="topbar"></div>
     <div class="page" id="page">
       <div id="msg"></div>
-      <div id="setup-banner"></div>
+      <div id="getting-started"></div>
 
       <!-- Stats -->
       <div class="stats-grid" id="stats-grid">
@@ -47,18 +47,45 @@
 <script>
 buildLayout('Dashboard');
 
-async function checkSetup() {
+function stepRow(done, label, href, cta) {
+  const icon = done
+    ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(35,134,54,.15);color:var(--accent-h);font-size:13px;flex-shrink:0">✓</span>`
+    : `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1px solid var(--border);color:var(--muted);flex-shrink:0"></span>`;
+  return `
+    <div class="flex items-center gap-12" style="padding:10px 0;${done ? 'opacity:.6' : ''}">
+      ${icon}
+      <span style="flex:1;font-size:13px;${done ? 'text-decoration:line-through' : ''}">${escHtml(label)}</span>
+      ${!done ? `<a href="${href}" class="btn btn-primary btn-sm" style="flex-shrink:0">${escHtml(cta)}</a>` : ''}
+    </div>`;
+}
+
+async function loadGettingStarted() {
   try {
-    const settings = await fetch('/api/settings').then(r => r.json());
-    if (!settings.gmail.address || !settings.gmail.appPasswordConfigured) {
-      qs('#setup-banner').innerHTML = `
-        <div class="alert alert-warn flex items-center justify-between gap-12">
-          <span>Gmail isn't configured yet — sending will fail until you add your address and App Password.</span>
-          <a href="/settings.html" class="btn btn-primary btn-sm" style="flex-shrink:0">Finish Setup</a>
-        </div>`;
+    const [settings, profile, historyStats] = await Promise.all([
+      fetch('/api/settings').then(r => r.json()),
+      fetch('/api/profile').then(r => r.json()),
+      fetch('/api/history/stats').then(r => r.json()),
+    ]);
+
+    const gmailDone   = !!(settings.gmail.address && settings.gmail.appPasswordConfigured);
+    const profileDone = !!(profile.full_name && profile.bio);
+    const sentDone    = historyStats.total > 0;
+
+    if (gmailDone && profileDone && sentDone) {
+      qs('#getting-started').innerHTML = '';
+      return;
     }
+
+    qs('#getting-started').innerHTML = `
+      <div class="card mb-24">
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:4px">Getting Started</h3>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:4px">A few quick steps before you're sending real campaigns.</p>
+        ${stepRow(gmailDone,   'Connect your Gmail account', '/settings.html', 'Connect')}
+        ${stepRow(profileDone, 'Add your name and bio (used as the email template)', '/settings.html', 'Edit Profile')}
+        ${stepRow(sentDone,    'Send your first email', '/upload.html', 'Get Started')}
+      </div>`;
   } catch (err) {
-    console.error('Failed to check setup status', err);
+    console.error('Failed to load getting-started status', err);
   }
 }
 
@@ -105,7 +132,7 @@ async function loadDashboard() {
   }
 }
 
-checkSetup();
+loadGettingStarted();
 loadDashboard();
 // Auto-refresh every 15 seconds if any campaign is processing
 setInterval(async () => {
