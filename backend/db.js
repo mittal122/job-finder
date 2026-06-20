@@ -72,6 +72,26 @@ CREATE TABLE IF NOT EXISTS mapping_configs (
   mapping    JSONB        DEFAULT '{}',
   created_at TIMESTAMPTZ  DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS send_history (
+  id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  source          VARCHAR(50)   NOT NULL,
+  session_id      VARCHAR(100),
+  email           VARCHAR(255)  NOT NULL,
+  company         VARCHAR(255),
+  subject         VARCHAR(512),
+  body            TEXT,
+  status          VARCHAR(50)   NOT NULL,
+  error_message   TEXT,
+  resume_filename VARCHAR(255),
+  sent_at         TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_send_history_source  ON send_history(source);
+CREATE INDEX IF NOT EXISTS idx_send_history_status  ON send_history(status);
+CREATE INDEX IF NOT EXISTS idx_send_history_email   ON send_history(email);
+CREATE INDEX IF NOT EXISTS idx_send_history_created ON send_history(created_at);
 `;
 
 async function initDb() {

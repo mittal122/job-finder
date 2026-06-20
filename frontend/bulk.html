@@ -491,6 +491,7 @@ async function startSend() {
     formData.append('delaySeconds', qs('#ss-delay').value  || '10');
     formData.append('batchSize',    qs('#ss-batch').value  || '10');
     formData.append('breakMinutes', qs('#ss-break').value  || '2');
+    formData.append('source', 'bulk');
     const resumeFile = qs('#resume-file')?.files[0];
     if (resumeFile) formData.append('resume', resumeFile);
 

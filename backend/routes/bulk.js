@@ -5,6 +5,7 @@ const fs = require('fs');
 const { randomUUID } = require('crypto');
 const { personalizeEmail, extractCompany, sleep } = require('../services/bulkAiService');
 const { sendEmail } = require('../services/emailService');
+const { recordHistory } = require('../services/historyService');
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/jobfinder_uploads';
 
@@ -76,6 +77,7 @@ router.post('/send', async (req, res) => {
   const delaySeconds  = Math.max(1,  parseInt(req.body.delaySeconds  || '10', 10));
   const batchSize     = Math.max(1,  parseInt(req.body.batchSize     || '10', 10));
   const breakMinutes  = Math.max(0,  parseFloat(req.body.breakMinutes || '2'));
+  const source        = req.body.source === 'template-map' ? 'template-map' : 'bulk';
 
   const sessionId = randomUUID();
   const session = {
@@ -120,11 +122,13 @@ router.post('/send', async (req, res) => {
         row.sentAt = new Date().toISOString();
         session.sent++;
         console.log(`[bulk-send] Sent to ${it.email}`);
+        recordHistory({ source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'SENT', resumeFilename, sentAt: row.sentAt });
       } catch (err) {
         row.status = 'failed';
         row.error = err.message;
         session.failed++;
         console.error(`[bulk-send] Failed ${it.email}: ${err.message}`);
+        recordHistory({ source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'FAILED', errorMessage: err.message, resumeFilename });
       }
       broadcast(session, { type: 'update', index: i, row, sent: session.sent, failed: session.failed, total: session.total });
 

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History — JobFinder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="page">
+      <div id="msg"></div>
+
+      <!-- Stats -->
+      <div class="stats-grid mb-24" id="stats">
+        <div class="stat-card"><div class="stat-label">Total Sent</div><div class="stat-value green" style="font-size:24px" id="st-sent">—</div></div>
+        <div class="stat-card"><div class="stat-label">Total Failed</div><div class="stat-value red" style="font-size:24px" id="st-failed">—</div></div>
+        <div class="stat-card"><div class="stat-label">Bulk Send</div><div class="stat-value" style="font-size:24px" id="st-bulk">—</div></div>
+        <div class="stat-card"><div class="stat-label">Template Map</div><div class="stat-value" style="font-size:24px" id="st-tmap">—</div></div>
+        <div class="stat-card"><div class="stat-label">Campaigns</div><div class="stat-value" style="font-size:24px" id="st-campaign">—</div></div>
+      </div>
+
+      <!-- Filters + search -->
+      <div class="flex items-center gap-12 mb-16" id="filters">
+        <input id="search" class="input" style="max-width:280px" type="text" placeholder="Search email, company, subject…">
+        <select id="source-filter" class="select" style="max-width:180px">
+          <option value="">All Sections</option>
+          <option value="bulk">Bulk Send</option>
+          <option value="template-map">Template Map</option>
+          <option value="campaign">Campaign</option>
+        </select>
+        <select id="status-filter" class="select" style="max-width:160px">
+          <option value="">All Statuses</option>
+          <option value="SENT">Sent</option>
+          <option value="FAILED">Failed</option>
+        </select>
+        <button id="refresh-btn" class="btn btn-ghost btn-sm" style="margin-left:auto">⟲ Refresh</button>
+      </div>
+
+      <!-- History table -->
+      <div class="table-wrap" id="history-table">
+        <div style="padding:24px">${spinner('Loading history…')}</div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Email body modal -->
+<div id="history-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="flex items-center justify-between mb-16">
+      <div class="modal-title" id="modal-title">Email Detail</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕ Close</button>
+    </div>
+    <div id="modal-body" style="white-space:pre-wrap;font-size:13px;line-height:1.7;max-height:60vh;overflow-y:auto;background:var(--surface2);padding:16px;border-radius:8px;border:1px solid var(--border)"></div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+buildLayout('History');
+
+let currentPage = 1;
+const PAGE_SIZE = 25;
+
+const SOURCE_LABELS = { bulk: 'Bulk Send', 'template-map': 'Template Map', campaign: 'Campaign' };
+
+async function loadStats() {
+  try {
+    const s = await api.getHistoryStats();
+    qs('#st-sent').textContent     = s.total_sent;
+    qs('#st-failed').textContent   = s.total_failed;
+    qs('#st-bulk').textContent     = s.total_bulk;
+    qs('#st-tmap').textContent     = s.total_template_map;
+    qs('#st-campaign').textContent = s.total_campaign;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+async function loadHistory() {
+  const search = qs('#search').value.trim();
+  const source = qs('#source-filter').value;
+  const status = qs('#status-filter').value;
+  try {
+    const data = await api.getHistory({
+      ...(search ? { search } : {}),
+      ...(source ? { source } : {}),
+      ...(status ? { status } : {}),
+      page: currentPage,
+      size: PAGE_SIZE,
+    });
+
+    if (!data.items.length) {
+      qs('#history-table').innerHTML = emptyState('📭', 'No emails sent yet', 'Emails sent from Bulk Send, Template Map, or Campaigns will show up here.');
+      qs('#pagination').innerHTML = '';
+      return;
+    }
+
+    qs('#history-table').innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Sent At</th><th>Section</th><th>Recipient</th><th>Company</th><th>Subject</th><th>Status</th><th>Error</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${data.items.map(h => `
+            <tr>
+              <td class="text-muted text-sm">${fmt(h.sent_at || h.created_at)}</td>
+              <td><span class="badge badge-${escHtml(h.source)}">${escHtml(SOURCE_LABELS[h.source] || h.source)}</span></td>
+              <td class="text-mono text-sm">${escHtml(h.email)}</td>
+              <td>${escHtml(h.company || '—')}</td>
+              <td class="text-sm" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(h.subject || '—')}</td>
+              <td>${badge(h.status)}</td>
+              <td class="text-sm" style="color:var(--red-h);max-width:200px" title="${escHtml(h.error_message || '')}">${h.error_message ? escHtml(h.error_message.slice(0, 60)) + (h.error_message.length > 60 ? '…' : '') : '—'}</td>
+              <td>
+                <div class="flex gap-8">
+                  ${h.body ? `<button class="btn btn-ghost btn-sm" onclick='viewEntry(${JSON.stringify(h)})'>View</button>` : ''}
+                  <button class="btn btn-danger btn-sm" onclick="deleteEntry('${h.id}', this)">Delete</button>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    const totalPages = Math.ceil(data.total / PAGE_SIZE);
+    qs('#pagination').innerHTML = totalPages <= 1 ? '' : `
+      <button class="btn btn-ghost btn-sm" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>
+      <span class="page-info">Page ${currentPage} of ${totalPages} (${data.total} total)</span>
+      <button class="btn btn-ghost btn-sm" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>`;
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+function changePage(p) { currentPage = p; loadHistory(); }
+
+function viewEntry(h) {
+  qs('#modal-title').textContent = `To: ${h.email} — ${h.subject || '(no subject)'}`;
+  qs('#modal-body').textContent = h.body || '(no body recorded)';
+  qs('#history-modal').classList.remove('hidden');
+}
+
+function closeModal() { qs('#history-modal').classList.add('hidden'); }
+qs('#history-modal').addEventListener('click', e => { if (e.target === qs('#history-modal')) closeModal(); });
+
+async function deleteEntry(id, btn) {
+  if (!confirm('Delete this history entry?')) return;
+  btn.disabled = true;
+  try {
+    await api.deleteHistoryItem(id);
+    loadHistory();
+    loadStats();
+  } catch (err) {
+    showAlert(qs('#msg'), 'error', err.message);
+  }
+}
+
+let debounce;
+qs('#search').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => { currentPage = 1; loadHistory(); }, 350); });
+qs('#source-filter').addEventListener('change', () => { currentPage = 1; loadHistory(); });
+qs('#status-filter').addEventListener('change', () => { currentPage = 1; loadHistory(); });
+qs('#refresh-btn').addEventListener('click', () => { loadHistory(); loadStats(); });
+
+loadStats();
+loadHistory();
+</script>
+</body>
+</html>

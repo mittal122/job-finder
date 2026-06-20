@@ -16,6 +16,7 @@ const { router: settingsRoutes } = require('./routes/settings');
 const logsRoutes    = require('./routes/logs');
 const bulkRoutes        = require('./routes/bulk');
 const templateMapRoutes = require('./routes/template-map');
+const historyRoutes     = require('./routes/history');
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use('/api/settings',  settingsRoutes);
 app.use('/api/logs',      logsRoutes);
 app.use('/api/bulk',         bulkRoutes);
 app.use('/api/template-map', templateMapRoutes);
+app.use('/api/history',      historyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));

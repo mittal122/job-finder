@@ -1,6 +1,8 @@
+const path = require('path');
 const { pool } = require('../db');
 const { generateEmail } = require('./aiService');
 const { sendEmail } = require('./emailService');
+const { recordHistory } = require('./historyService');
 const config = require('../config');
 
 function randomDelay(min, max) {
@@ -58,6 +60,7 @@ async function processCampaign(campaignId) {
         `UPDATE email_logs SET status='FAILED', error_message=$1, updated_at=NOW() WHERE id=$2`,
         [`AI generation failed: ${err.message}`, logEntry.id]
       );
+      recordHistory({ source: 'campaign', sessionId: campaignId, email: logEntry.email, company: logEntry.company_name, status: 'FAILED', errorMessage: `AI generation failed: ${err.message}` });
       await updateCampaignCounts(campaignId);
       continue;
     }
@@ -66,15 +69,18 @@ async function processCampaign(campaignId) {
     try {
       await sendEmail({ to: logEntry.email, subject, body, resumePath: resume_path });
 
+      const sentAt = new Date();
       await pool.query(
-        `UPDATE email_logs SET status='SENT', sent_at=NOW(), updated_at=NOW() WHERE id=$1`,
-        [logEntry.id]
+        `UPDATE email_logs SET status='SENT', sent_at=$1, updated_at=NOW() WHERE id=$2`,
+        [sentAt, logEntry.id]
       );
+      recordHistory({ source: 'campaign', sessionId: campaignId, email: logEntry.email, company: logEntry.company_name, subject, body, status: 'SENT', resumeFilename: resume_path ? path.basename(resume_path) : null, sentAt });
     } catch (err) {
       await pool.query(
         `UPDATE email_logs SET status='FAILED', error_message=$1, updated_at=NOW() WHERE id=$2`,
         [`Send failed: ${err.message}`, logEntry.id]
       );
+      recordHistory({ source: 'campaign', sessionId: campaignId, email: logEntry.email, company: logEntry.company_name, subject, body, status: 'FAILED', errorMessage: `Send failed: ${err.message}` });
     }
 
     await updateCampaignCounts(campaignId);

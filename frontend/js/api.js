@@ -34,6 +34,11 @@ const api = {
   uploadCampaign: (formData) => fetch(`${API_BASE}/upload`, { method: 'POST', body: formData })
     .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error); return d; })),
 
+  // History — unified record of every email sent from any section
+  getHistory: (params)      => apiFetch(`/history?${new URLSearchParams(params)}`),
+  getHistoryStats: ()       => apiFetch('/history/stats'),
+  deleteHistoryItem: (id)   => apiFetch(`/history/${id}`, { method: 'DELETE' }),
+
   health: () => apiFetch('/health'),
 };
 
