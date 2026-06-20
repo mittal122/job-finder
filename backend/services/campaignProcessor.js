@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const { generateEmail } = require('./aiService');
 const { sendEmail } = require('./emailService');
 const { recordHistory } = require('./historyService');
-const config = require('../config');
+const { getSetting } = require('./settingsService');
 
 function randomDelay(min, max) {
   const ms = (Math.floor(Math.random() * (max - min + 1)) + min) * 1000;
@@ -12,7 +12,15 @@ function randomDelay(min, max) {
 
 async function getProfile() {
   const { rows } = await pool.query('SELECT * FROM candidate_profiles WHERE id = 1');
-  return rows[0] || { full_name: 'Mittal Domaidya', skills: [], projects: [], experience_years: 0, bio: '' };
+  return rows[0] || { full_name: '', skills: [], projects: [], experience_years: 0, bio: '' };
+}
+
+async function getEmailDelayRange() {
+  const [min, max] = await Promise.all([
+    getSetting('email_delay_min'),
+    getSetting('email_delay_max'),
+  ]);
+  return { min: parseInt(min, 10) || 30, max: parseInt(max, 10) || 60 };
 }
 
 async function updateCampaignCounts(campaignId) {
@@ -40,6 +48,7 @@ async function processCampaign(campaignId) {
   const limit = test_mode > 0 ? test_mode : emailRows.length;
   const batch = emailRows.slice(0, limit);
   const profile = await getProfile();
+  const emailDelay = await getEmailDelayRange();
 
   for (let i = 0; i < batch.length; i++) {
     const logEntry = batch[i];
@@ -87,7 +96,7 @@ async function processCampaign(campaignId) {
 
     // Rate limiting delay (skip after last email)
     if (i < batch.length - 1) {
-      await randomDelay(config.emailDelayMin, config.emailDelayMax);
+      await randomDelay(emailDelay.min, emailDelay.max);
     }
   }
 

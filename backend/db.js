@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS candidate_profiles (
   id            SERIAL PRIMARY KEY,
-  full_name     VARCHAR(255)  DEFAULT 'Mittal Domaidya',
+  full_name     VARCHAR(255),
   email         VARCHAR(255),
   phone         VARCHAR(50),
   linkedin      VARCHAR(512),
@@ -94,19 +94,33 @@ CREATE INDEX IF NOT EXISTS idx_send_history_email   ON send_history(email);
 CREATE INDEX IF NOT EXISTS idx_send_history_created ON send_history(created_at);
 `;
 
+// One-time seed from an env var, only if the setting has no value yet.
+// Lets .env act as a convenience for first boot / headless deployments
+// without ever clobbering a value the user has since configured through
+// the Settings page — unlike a previous version of this function, which
+// unconditionally overwrote the DB value from env on every single boot.
+async function seedSettingIfEmpty(key, envValue) {
+  if (!envValue) return;
+  const { rows } = await pool.query('SELECT value FROM app_settings WHERE key=$1', [key]);
+  if (rows.length && rows[0].value) return;
+  await pool.query(
+    `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [key, envValue]
+  );
+}
+
 async function initDb() {
   await pool.query(SCHEMA_SQL);
   // Migrate old gemini key → nvidia key if present
   await pool.query(`UPDATE app_settings SET key='nvidia_api_key' WHERE key='gemini_api_key'`);
-  // Seed NVIDIA key from env — always overwrite so .env is the source of truth
-  const envKey = process.env.NVIDIA_API_KEY || '';
-  if (envKey) {
-    await pool.query(
-      `INSERT INTO app_settings (key, value) VALUES ('nvidia_api_key', $1)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [envKey]
-    );
-  }
+
+  await seedSettingIfEmpty('nvidia_api_key',     process.env.NVIDIA_API_KEY);
+  await seedSettingIfEmpty('gmail_address',      process.env.GMAIL_ADDRESS);
+  await seedSettingIfEmpty('gmail_app_password', process.env.GMAIL_APP_PASSWORD);
+  await seedSettingIfEmpty('email_delay_min',    process.env.EMAIL_DELAY_MIN);
+  await seedSettingIfEmpty('email_delay_max',    process.env.EMAIL_DELAY_MAX);
+
   console.log('Database schema ready.');
 }
 

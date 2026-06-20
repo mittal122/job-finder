@@ -1,27 +1,43 @@
 const nodemailer = require('nodemailer');
 const path = require('path');
-const config = require('../config');
+const { pool } = require('../db');
+const { getSetting } = require('./settingsService');
 
-function createTransporter() {
+async function getGmailCredentials() {
+  const [address, appPassword] = await Promise.all([
+    getSetting('gmail_address'),
+    getSetting('gmail_app_password'),
+  ]);
+  if (!address || !appPassword) {
+    throw new Error('Gmail is not configured yet. Go to Settings to add your Gmail address and App Password.');
+  }
+  return { address, appPassword };
+}
+
+async function getSenderName() {
+  const { rows } = await pool.query('SELECT full_name FROM candidate_profiles WHERE id = 1');
+  return rows[0]?.full_name?.trim() || '';
+}
+
+function createTransporter(address, appPassword) {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,
-    auth: {
-      user: config.gmailAddress,
-      pass: config.gmailAppPassword,
-    },
+    auth: { user: address, pass: appPassword },
   });
 }
 
 async function sendEmail({ to, subject, body, resumePath, resumeFilename }) {
-  const transporter = createTransporter();
+  const { address, appPassword } = await getGmailCredentials();
+  const senderName = await getSenderName();
+  const transporter = createTransporter(address, appPassword);
 
   // Strip markdown links for plain text version
   const plainText = stripMarkdown(body);
 
   const mailOptions = {
-    from: `"${config.gmailSenderName || 'Mittal Domadiya'}" <${config.gmailAddress}>`,
+    from: senderName ? `"${senderName}" <${address}>` : address,
     to,
     subject,
     text: plainText,
@@ -36,6 +52,21 @@ async function sendEmail({ to, subject, body, resumePath, resumeFilename }) {
   }
 
   const info = await transporter.sendMail(mailOptions);
+  return info.messageId;
+}
+
+// Sends a one-off test message to verify Gmail credentials work, using
+// credentials passed in directly rather than whatever is already saved —
+// lets the Settings page verify before persisting.
+async function sendTestEmail({ address, appPassword }) {
+  if (!address || !appPassword) throw new Error('Gmail address and App Password are both required.');
+  const transporter = createTransporter(address, appPassword);
+  const info = await transporter.sendMail({
+    from: address,
+    to: address,
+    subject: 'Job Finder — test email',
+    text: 'This confirms your Gmail address and App Password are configured correctly. You can now send campaigns from Job Finder.',
+  });
   return info.messageId;
 }
 
@@ -67,4 +98,4 @@ function bodyToHtml(text) {
   return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:580px;padding:0">${html}</div>`;
 }
 
-module.exports = { sendEmail };
+module.exports = { sendEmail, sendTestEmail };

@@ -32,7 +32,7 @@ async function generateEmail(profile, row) {
   });
 
   const role    = row.job_role || 'Software Engineer';
-  const subject = `Application for ${role} | ${profile.full_name}`;
+  const subject = profile.full_name ? `Application for ${role} | ${profile.full_name}` : `Application for ${role}`;
 
   console.log(`[ai] Generated email for ${row.company_name} (${row.hr_name || 'Hiring Manager'})`);
   return { subject, body };
