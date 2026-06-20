@@ -7,6 +7,7 @@ const { personalizeEmail, extractCompany, sleep } = require('../services/bulkAiS
 const { sendEmail } = require('../services/emailService');
 const { recordHistory } = require('../services/historyService');
 const { sendLimiter, uploadLimiter } = require('../middleware/rateLimiter');
+const { isResumeFile } = require('../utils/fileSignature');
 const config = require('../config');
 
 const UPLOAD_DIR = config.uploadDir;
@@ -62,6 +63,9 @@ router.post('/send', sendLimiter, async (req, res) => {
   let resumeFilename = null;
   const resumeFile = req.files?.resume;
   if (resumeFile) {
+    if (!isResumeFile(resumeFile.data)) {
+      return res.status(400).json({ error: 'That resume file doesn\'t look like a valid PDF/DOC/DOCX. Check the file and try again.' });
+    }
     resumeFilename = resumeFile.name;                                    // preserve original name
     const ext = path.extname(resumeFile.name) || '.pdf';
     resumePath = path.join(UPLOAD_DIR, `resume_${Date.now()}${ext}`);  // temp path on disk only

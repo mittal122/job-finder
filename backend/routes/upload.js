@@ -8,6 +8,7 @@ const { pool } = require('../db');
 const { parseAndValidate } = require('../services/excelService');
 const config = require('../config');
 const { uploadLimiter } = require('../middleware/rateLimiter');
+const { isExcelBinary, isResumeFile } = require('../utils/fileSignature');
 
 // Ensure upload dir exists
 fs.mkdirSync(config.uploadDir, { recursive: true });
@@ -23,6 +24,10 @@ router.post('/', uploadLimiter, async (req, res) => {
     const campaignName = req.body.name || `Campaign ${new Date().toLocaleDateString()}`;
     const testMode = parseInt(req.body.test_mode || '0', 10);
 
+    if (!isExcelBinary(excelFile.data)) {
+      return res.status(400).json({ error: 'That file doesn\'t look like a valid Excel file (.xlsx/.xls). Check the file and try again.' });
+    }
+
     // Validate Excel
     const validation = parseAndValidate(excelFile.data);
 
@@ -34,6 +39,9 @@ router.post('/', uploadLimiter, async (req, res) => {
     let resumePath = null;
     if (req.files.resume) {
       const resumeFile = req.files.resume;
+      if (!isResumeFile(resumeFile.data)) {
+        return res.status(400).json({ error: 'That resume file doesn\'t look like a valid PDF/DOC/DOCX. Check the file and try again.' });
+      }
       const ext = path.extname(resumeFile.name) || '.pdf';
       resumePath = path.join(config.uploadDir, `resume_${uuidv4()}${ext}`);
       await resumeFile.mv(resumePath);

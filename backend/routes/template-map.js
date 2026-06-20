@@ -1,14 +1,23 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const XLSX = require('xlsx');
 const { pool } = require('../db');
 const { uploadLimiter } = require('../middleware/rateLimiter');
+const { isExcelBinary } = require('../utils/fileSignature');
 
 // ── POST /api/template-map/parse ─────────────────────────────────────────────
 // Upload Excel → returns columns + all rows + 5-row preview
 router.post('/parse', uploadLimiter, (req, res) => {
   const file = req.files?.excel;
   if (!file) return res.status(400).json({ error: 'No Excel file uploaded' });
+
+  // CSV has no reliable binary signature — only gate .xlsx/.xls, let
+  // XLSX.read() itself reject anything else that doesn't actually parse.
+  const ext = path.extname(file.name || '').toLowerCase();
+  if (ext !== '.csv' && !isExcelBinary(file.data)) {
+    return res.status(400).json({ error: 'That file doesn\'t look like a valid Excel file. Check the file and try again.' });
+  }
 
   try {
     const wb = XLSX.read(file.data, { type: 'buffer' });
