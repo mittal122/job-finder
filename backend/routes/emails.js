@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
   const { campaign_id, status, search, page = 1, size = 20 } = req.query;
   const offset = (parseInt(page, 10) - 1) * parseInt(size, 10);
 
-  const conditions = [];
-  const params = [];
+  const conditions = ['user_id = $1'];
+  const params = [req.user.id];
 
   if (campaign_id) { params.push(campaign_id); conditions.push(`campaign_id = $${params.length}`); }
   if (status)      { params.push(status);      conditions.push(`status = $${params.length}`); }
@@ -18,13 +18,13 @@ router.get('/', async (req, res) => {
     conditions.push(`(company_name ILIKE $${params.length} OR email ILIKE $${params.length} OR hr_name ILIKE $${params.length})`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   try {
     const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM email_logs ${where}`, params);
     const total = countRes.rows[0].total;
 
-    params.push(parseInt(size, 10), offset);
+    params.push(Math.min(parseInt(size, 10), 200), offset);
     const { rows } = await pool.query(
       `SELECT * FROM email_logs ${where} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 // GET /api/emails/:id
 router.get('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM email_logs WHERE id=$1', [req.params.id]);
+    const { rows } = await pool.query('SELECT * FROM email_logs WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'Email log not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -53,8 +53,8 @@ router.get('/export/:campaign_id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT hr_name, company_name, email, job_role, subject, status, error_message, sent_at, created_at
-       FROM email_logs WHERE campaign_id=$1 ORDER BY created_at`,
-      [req.params.campaign_id]
+       FROM email_logs WHERE campaign_id=$1 AND user_id=$2 ORDER BY created_at`,
+      [req.params.campaign_id, req.user.id]
     );
 
     const ws = XLSX.utils.json_to_sheet(rows);

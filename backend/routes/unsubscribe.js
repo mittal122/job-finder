@@ -15,16 +15,17 @@ h1{font-size:18px;margin:0 0 8px}p{font-size:14px;color:#8b949e;margin:0}</style
 </head><body><div class="card"><h1>${escHtml(title)}</h1><p>${escHtml(message)}</p></div></body></html>`;
 }
 
-// GET /api/unsubscribe?email=...&token=...
+// GET /api/unsubscribe?user=...&email=...&token=...
 // Public, unauthenticated by design — opened directly from a link in an
-// email. The signed token (tied to that specific email address) is what
-// prevents anyone from suppressing an address that isn't theirs.
+// email. The token is signed over (user, email) together, so it both
+// resolves which account's suppression list to update and prevents
+// anyone from suppressing an address that isn't theirs to manage.
 router.get('/', async (req, res) => {
-  const { email, token } = req.query;
-  if (!email || !(await verifyUnsubscribeToken(email, token))) {
+  const { user, email, token } = req.query;
+  if (!user || !email || !(await verifyUnsubscribeToken(user, email, token))) {
     return res.status(400).send(page('Invalid link', 'This unsubscribe link is invalid or has expired.'));
   }
-  await suppress(email, 'unsubscribed');
+  await suppress(user, email, 'unsubscribed');
   res.send(page('You\'re unsubscribed', `${email} will not receive any further emails from this sender.`));
 });
 

@@ -1,8 +1,8 @@
 const OpenAI = require('openai');
 const { getSetting } = require('./settingsService');
 
-async function getClient() {
-  const apiKey = await getSetting('nvidia_api_key');
+async function getClient(userId) {
+  const apiKey = await getSetting(userId, 'nvidia_api_key');
   if (!apiKey) throw new Error('NVIDIA API key not configured. Go to Settings.');
   return new OpenAI({ baseURL: 'https://integrate.api.nvidia.com/v1', apiKey });
 }
@@ -26,7 +26,7 @@ function fillTemplate(template, companyName) {
     .replace(/\[Email\]/gi,          '');
 }
 
-async function personalizeEmail(template, subject, recipientEmail) {
+async function personalizeEmail(userId, template, subject, recipientEmail) {
   const company = extractCompany(recipientEmail);
 
   // If template has no AI-needing content, do direct substitution
@@ -38,7 +38,7 @@ async function personalizeEmail(template, subject, recipientEmail) {
   }
 
   // Template has hardcoded company references — use AI to swap them
-  const client = await getClient();
+  const client = await getClient(userId);
   const prompt = `You are updating a job application email to target a new company.
 
 ORIGINAL SUBJECT: ${subject}

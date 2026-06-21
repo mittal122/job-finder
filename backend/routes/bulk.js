@@ -36,7 +36,7 @@ router.post('/generate', uploadLimiter, async (req, res) => {
     if (!email) continue;
     try {
       console.log(`[bulk] Generating ${i + 1}/${emails.length}: ${email}`);
-      const generated = await personalizeEmail(template, subject, email);
+      const generated = await personalizeEmail(req.user.id, template, subject, email);
       results.push({ email, company: generated.company, subject: generated.subject, body: generated.body, status: 'ready' });
     } catch (err) {
       console.error(`[bulk] Generation failed for ${email}: ${err.message}`);
@@ -88,6 +88,7 @@ router.post('/send', sendLimiter, async (req, res) => {
 
   const sessionId = randomUUID();
   const session = {
+    userId: req.user.id,
     total: items.length,
     sent: 0,
     failed: 0,
@@ -123,22 +124,22 @@ router.post('/send', sendLimiter, async (req, res) => {
       const it = items[i];
       const row = session.results[i];
       try {
-        if (await isSuppressed(it.email)) {
+        if (await isSuppressed(session.userId, it.email)) {
           throw new Error('Recipient has unsubscribed — skipped');
         }
         console.log(`[bulk-send] Sending ${i + 1}/${items.length} to ${it.email}`);
-        await sendEmail({ to: it.email, subject: it.subject, body: it.body, resumePath, resumeFilename });
+        await sendEmail({ userId: session.userId, to: it.email, subject: it.subject, body: it.body, resumePath, resumeFilename });
         row.status = 'sent';
         row.sentAt = new Date().toISOString();
         session.sent++;
         console.log(`[bulk-send] Sent to ${it.email}`);
-        recordHistory({ source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'SENT', resumeFilename, sentAt: row.sentAt });
+        recordHistory({ userId: session.userId, source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'SENT', resumeFilename, sentAt: row.sentAt });
       } catch (err) {
         row.status = 'failed';
         row.error = err.message;
         session.failed++;
         console.error(`[bulk-send] Failed ${it.email}: ${err.message}`);
-        recordHistory({ source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'FAILED', errorMessage: err.message, resumeFilename });
+        recordHistory({ userId: session.userId, source, sessionId, email: it.email, company: row.company, subject: it.subject, body: it.body, status: 'FAILED', errorMessage: err.message, resumeFilename });
       }
       broadcast(session, { type: 'update', index: i, row, sent: session.sent, failed: session.failed, total: session.total });
 
@@ -175,7 +176,9 @@ router.post('/send', sendLimiter, async (req, res) => {
 // POST /api/bulk/stop/:sessionId — stop a running session
 router.post('/stop/:sessionId', (req, res) => {
   const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
+  // 404 (not 403) for both "doesn't exist" and "belongs to someone else" —
+  // never reveal whether a given session ID belongs to another account.
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: 'Session not found' });
   if (session.status !== 'running') return res.json({ ok: true, status: session.status });
   session.stopped = true;
   console.log(`[bulk-send] Stop requested for session ${req.params.sessionId}`);
@@ -185,7 +188,7 @@ router.post('/stop/:sessionId', (req, res) => {
 // GET /api/bulk/progress/:sessionId — SSE
 router.get('/progress/:sessionId', (req, res) => {
   const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: 'Session not found' });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

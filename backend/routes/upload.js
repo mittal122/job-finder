@@ -49,22 +49,23 @@ router.post('/', uploadLimiter, async (req, res) => {
 
     // Create campaign
     const campaignId = uuidv4();
+    const userId = req.user.id;
     await pool.query(
-      `INSERT INTO campaigns (id, name, status, total_emails, pending_count, test_mode, resume_path)
-       VALUES ($1, $2, 'PENDING', $3, $4, $5, $6)`,
-      [campaignId, campaignName, validation.valid_rows.length, validation.valid_rows.length, testMode, resumePath]
+      `INSERT INTO campaigns (id, user_id, name, status, total_emails, pending_count, test_mode, resume_path)
+       VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, $7)`,
+      [campaignId, userId, campaignName, validation.valid_rows.length, validation.valid_rows.length, testMode, resumePath]
     );
 
     // Insert email logs — one parameterized multi-row INSERT, no manual escaping
     const params = [];
     const placeholders = validation.valid_rows.map(row => {
       const base = params.length;
-      params.push(uuidv4(), campaignId, row.hr_name || null, row.company_name, row.email, row.job_role || null, 'PENDING');
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+      params.push(uuidv4(), userId, campaignId, row.hr_name || null, row.company_name, row.email, row.job_role || null, 'PENDING');
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`;
     }).join(',');
 
     await pool.query(
-      `INSERT INTO email_logs (id, campaign_id, hr_name, company_name, email, job_role, status) VALUES ${placeholders}`,
+      `INSERT INTO email_logs (id, user_id, campaign_id, hr_name, company_name, email, job_role, status) VALUES ${placeholders}`,
       params
     );
 

@@ -5,10 +5,10 @@ const { getSetting } = require('./settingsService');
 const { generateUnsubscribeToken } = require('./suppressionService');
 const config = require('../config');
 
-async function getGmailCredentials() {
+async function getGmailCredentials(userId) {
   const [address, appPassword] = await Promise.all([
-    getSetting('gmail_address'),
-    getSetting('gmail_app_password'),
+    getSetting(userId, 'gmail_address'),
+    getSetting(userId, 'gmail_app_password'),
   ]);
   if (!address || !appPassword) {
     throw new Error('Gmail is not configured yet. Go to Settings to add your Gmail address and App Password.');
@@ -16,8 +16,8 @@ async function getGmailCredentials() {
   return { address, appPassword };
 }
 
-async function getSenderName() {
-  const { rows } = await pool.query('SELECT full_name FROM candidate_profiles WHERE id = 1');
+async function getSenderName(userId) {
+  const { rows } = await pool.query('SELECT full_name FROM candidate_profiles WHERE user_id = $1', [userId]);
   return rows[0]?.full_name?.trim() || '';
 }
 
@@ -30,16 +30,16 @@ function createTransporter(address, appPassword) {
   });
 }
 
-async function buildUnsubscribeUrl(to) {
-  const token = await generateUnsubscribeToken(to);
-  return `${config.publicBaseUrl}/api/unsubscribe?email=${encodeURIComponent(to)}&token=${token}`;
+async function buildUnsubscribeUrl(userId, to) {
+  const token = await generateUnsubscribeToken(userId, to);
+  return `${config.publicBaseUrl}/api/unsubscribe?user=${userId}&email=${encodeURIComponent(to)}&token=${token}`;
 }
 
-async function sendEmail({ to, subject, body, resumePath, resumeFilename }) {
-  const { address, appPassword } = await getGmailCredentials();
-  const senderName = await getSenderName();
+async function sendEmail({ userId, to, subject, body, resumePath, resumeFilename }) {
+  const { address, appPassword } = await getGmailCredentials(userId);
+  const senderName = await getSenderName(userId);
   const transporter = createTransporter(address, appPassword);
-  const unsubscribeUrl = await buildUnsubscribeUrl(to);
+  const unsubscribeUrl = await buildUnsubscribeUrl(userId, to);
 
   // Strip markdown links for plain text version
   const plainText = `${stripMarkdown(body)}\n\n---\nDon't want these emails? Unsubscribe: ${unsubscribeUrl}`;
@@ -66,7 +66,8 @@ async function sendEmail({ to, subject, body, resumePath, resumeFilename }) {
 
 // Sends a one-off test message to verify Gmail credentials work, using
 // credentials passed in directly rather than whatever is already saved —
-// lets the Settings page verify before persisting.
+// lets the Settings page verify before persisting. No userId/unsubscribe
+// link needed — this isn't a real campaign send.
 async function sendTestEmail({ address, appPassword }) {
   if (!address || !appPassword) throw new Error('Gmail address and App Password are both required.');
   const transporter = createTransporter(address, appPassword);

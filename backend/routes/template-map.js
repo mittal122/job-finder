@@ -90,7 +90,7 @@ router.post('/generate', (req, res) => {
 // ── GET /api/template-map/configs ────────────────────────────────────────────
 router.get('/configs', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM mapping_configs ORDER BY created_at DESC');
+    const { rows } = await pool.query('SELECT * FROM mapping_configs WHERE user_id=$1 ORDER BY created_at DESC', [req.user.id]);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -103,8 +103,8 @@ router.post('/configs', async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'Config name required' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO mapping_configs (name, subject, body, mapping) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [name.trim(), subject || '', body || '', JSON.stringify(mapping || {})]
+      `INSERT INTO mapping_configs (user_id, name, subject, body, mapping) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.id, name.trim(), subject || '', body || '', JSON.stringify(mapping || {})]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -115,7 +115,7 @@ router.post('/configs', async (req, res) => {
 // ── DELETE /api/template-map/configs/:id ─────────────────────────────────────
 router.delete('/configs/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM mapping_configs WHERE id=$1', [req.params.id]);
+    await pool.query('DELETE FROM mapping_configs WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

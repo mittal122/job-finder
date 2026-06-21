@@ -11,12 +11,13 @@ function mask(value) {
 // GET /api/settings
 router.get('/', async (req, res) => {
   try {
+    const userId = req.user.id;
     const [nvidiaKey, gmailAddress, gmailAppPassword, delayMin, delayMax] = await Promise.all([
-      getSetting('nvidia_api_key'),
-      getSetting('gmail_address'),
-      getSetting('gmail_app_password'),
-      getSetting('email_delay_min'),
-      getSetting('email_delay_max'),
+      getSetting(userId, 'nvidia_api_key'),
+      getSetting(userId, 'gmail_address'),
+      getSetting(userId, 'gmail_app_password'),
+      getSetting(userId, 'email_delay_min'),
+      getSetting(userId, 'email_delay_max'),
     ]);
     res.json({
       gmail: {
@@ -41,12 +42,13 @@ router.get('/', async (req, res) => {
 // PUT /api/settings — accepts any subset of gmail/nvidia/emailDelay
 router.put('/', async (req, res) => {
   const { gmail, nvidia, emailDelay } = req.body || {};
+  const userId = req.user.id;
   try {
-    if (gmail?.address !== undefined) await setSetting('gmail_address', String(gmail.address).trim());
-    if (gmail?.appPassword)           await setSetting('gmail_app_password', String(gmail.appPassword).trim());
-    if (nvidia?.apiKey)               await setSetting('nvidia_api_key', String(nvidia.apiKey).trim());
-    if (emailDelay?.min !== undefined) await setSetting('email_delay_min', String(parseInt(emailDelay.min, 10) || 30));
-    if (emailDelay?.max !== undefined) await setSetting('email_delay_max', String(parseInt(emailDelay.max, 10) || 60));
+    if (gmail?.address !== undefined) await setSetting(userId, 'gmail_address', String(gmail.address).trim());
+    if (gmail?.appPassword)           await setSetting(userId, 'gmail_app_password', String(gmail.appPassword).trim());
+    if (nvidia?.apiKey)               await setSetting(userId, 'nvidia_api_key', String(nvidia.apiKey).trim());
+    if (emailDelay?.min !== undefined) await setSetting(userId, 'email_delay_min', String(parseInt(emailDelay.min, 10) || 30));
+    if (emailDelay?.max !== undefined) await setSetting(userId, 'email_delay_max', String(parseInt(emailDelay.max, 10) || 60));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

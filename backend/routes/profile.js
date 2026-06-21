@@ -4,7 +4,7 @@ const { pool } = require('../db');
 
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM candidate_profiles WHERE id=1');
+    const { rows } = await pool.query('SELECT * FROM candidate_profiles WHERE user_id=$1', [req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -28,7 +28,7 @@ router.put('/', async (req, res) => {
         projects         = COALESCE($9::jsonb, projects),
         experience_years = COALESCE($10, experience_years),
         updated_at       = NOW()
-      WHERE id = 1
+      WHERE user_id = $11
       RETURNING *
     `, [
       full_name || null,
@@ -41,6 +41,7 @@ router.put('/', async (req, res) => {
       skills ? JSON.stringify(skills) : null,
       projects ? JSON.stringify(projects) : null,
       experience_years ?? null,
+      req.user.id,
     ]);
     res.json(rows[0]);
   } catch (err) {
