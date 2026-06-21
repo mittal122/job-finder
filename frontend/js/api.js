@@ -1,17 +1,32 @@
 // Central API client — all pages import this
 const API_BASE = window.location.origin + '/api';
 
+// Pages that must never redirect-on-401 themselves — they're what a 401
+// redirects TO, so redirecting again would loop.
+const PUBLIC_PAGES = ['/login.html', '/signup.html'];
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
+  if (res.status === 401 && !PUBLIC_PAGES.includes(window.location.pathname)) {
+    window.location.href = '/login.html';
+    throw new Error('Not authenticated');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
 const api = {
+  // Auth
+  signup: (email, password) => apiFetch('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login:  (email, password) => apiFetch('/auth/login',  { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: ()                => apiFetch('/auth/logout', { method: 'POST' }),
+  getMe:  ()                => apiFetch('/auth/me'),
+  googleEnabled: ()         => apiFetch('/auth/google-enabled'),
+
   // Profile
   getProfile: ()         => apiFetch('/profile'),
   saveProfile: (body)    => apiFetch('/profile', { method: 'PUT', body: JSON.stringify(body) }),
