@@ -157,9 +157,11 @@
 
           <!-- Template -->
           <div class="card">
-            <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Email Template
-              <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">Use <code style="background:var(--input-bg);padding:1px 5px;border-radius:3px">{{Placeholder}}</code> for dynamic values</span>
-            </h3>
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:8px">Email Template</h3>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
+              <code style="background:var(--input-bg);padding:1px 5px;border-radius:3px;color:var(--primary)">{{Like_This}}</code> pulls a value from your Excel file (mapped below) — <code style="background:var(--input-bg);padding:1px 5px;border-radius:3px;color:var(--primary)">{{Name}}</code>/<code style="background:var(--input-bg);padding:1px 5px;border-radius:3px;color:var(--primary)">{{Company}}</code>/<code style="background:var(--input-bg);padding:1px 5px;border-radius:3px;color:var(--primary)">{{Email}}</code> always need mapping even if you don't use them in the text below, so the system knows which column is which.<br>
+              <code style="background:var(--input-bg);padding:1px 5px;border-radius:3px;color:#f39c12">[Like This]</code> is your own info, not from Excel — edit it once below before generating. You'll be warned if any are left unfilled.
+            </div>
             <div class="form-group">
               <label class="form-label">Subject</label>
               <input id="tpl-subject" class="input" type="text"
@@ -376,7 +378,25 @@ let excelRows    = [];
 let mapping      = {};   // { Placeholder: ColumnName }
 let generated    = [];   // result items
 
-const DEFAULT_PLACEHOLDERS = ['Name', 'Company', 'Email', 'Title'];
+// Name/Company/Email are always required mappings (the backend uses them to
+// know which column is the recipient/company/address even if the template
+// text never literally says {{Name}}) — seeded regardless of template
+// content. Anything else (like a custom {{Title}}) is only added if it's
+// actually detected in the template text, via onTemplateChange() below, so
+// the mapping table never shows a row for a placeholder that doesn't exist.
+const DEFAULT_PLACEHOLDERS = ['Name', 'Company', 'Email'];
+
+// Real-world recruiter spreadsheets rarely use the exact same word as the
+// placeholder name (e.g. a "Job Role" column for a {{Title}} placeholder) —
+// these groups let auto-matching try known synonyms before giving up and
+// guessing the first column, which is what previously caused {{Title}} to
+// silently map to the wrong column.
+const COLUMN_SYNONYMS = {
+  name:    ['name', 'recruiter name', 'hr name', 'contact name', 'contact person', 'full name'],
+  company: ['company', 'company name', 'organization', 'organisation', 'employer'],
+  email:   ['email', 'email address', 'e-mail', 'e-mail address', 'contact email'],
+  title:   ['title', 'job title', 'job role', 'role', 'position', 'designation'],
+};
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 function setStep(n) {
@@ -465,12 +485,25 @@ function autoDetect() {
 }
 
 function autoMatchColumn(ph) {
-  // Try exact match (case-insensitive), then partial
   const lower = ph.toLowerCase();
   const exact = excelColumns.find(c => c.toLowerCase() === lower);
   if (exact) return exact;
+
+  const group = Object.values(COLUMN_SYNONYMS).find(g => g.includes(lower));
+  if (group) {
+    const synExact = group.map(syn => excelColumns.find(c => c.toLowerCase() === syn)).find(Boolean);
+    if (synExact) return synExact;
+  }
+
   const partial = excelColumns.find(c => c.toLowerCase().includes(lower) || lower.includes(c.toLowerCase()));
-  return partial || (excelColumns[0] || '');
+  if (partial) return partial;
+
+  if (group) {
+    const synPartial = group.map(syn => excelColumns.find(c => c.toLowerCase().includes(syn) || syn.includes(c.toLowerCase()))).find(Boolean);
+    if (synPartial) return synPartial;
+  }
+
+  return excelColumns[0] || '';
 }
 
 function autoMatchColumns() {
@@ -603,18 +636,31 @@ async function startGenerate() {
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────────
+// Flags [Bracketed] fields the user was meant to personalize themselves
+// (resume/profile-style placeholders) that are still sitting unfilled —
+// these aren't Excel-mapped, so nothing else would ever catch them before
+// they go out as literal text in a real email.
+function detectUnfilled(text) {
+  const matches = text.match(/\[[^\[\]\n]{1,60}\]/g);
+  return matches ? [...new Set(matches)] : [];
+}
+
 function renderPreview(items) {
   const ready = items.filter(i => i.status === 'ready').length;
   const errs  = items.filter(i => i.status === 'error').length;
-  qs('#pv-count').textContent = `— ${ready} ready${errs ? `, ${errs} skipped (no email)` : ''}`;
+  const unfilledCount = items.filter(i => detectUnfilled(i.subject + '\n' + i.body).length).length;
+  qs('#pv-count').textContent = `— ${ready} ready${errs ? `, ${errs} skipped (no email)` : ''}${unfilledCount ? `, ${unfilledCount} with unfilled [fields]` : ''}`;
 
-  qs('#pv-list').innerHTML = items.map((it, idx) => `
+  qs('#pv-list').innerHTML = items.map((it, idx) => {
+    const unfilled = detectUnfilled(it.subject + '\n' + it.body);
+    return `
     <div class="preview-card status-${it.status}" id="pvcard-${idx}">
       <div class="pv-header" onclick="togglePv(${idx})">
         <span class="pv-sno">#${it.sno}</span>
         <span class="pv-email">${escHtml(it.email || '— no email —')}</span>
         ${it.company ? `<span class="co-badge">${escHtml(it.company)}</span>` : ''}
         ${it.name    ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(it.name)}</span>` : ''}
+        ${unfilled.length ? `<span class="status-pill" style="background:#3d2e0a;color:#f39c12" title="${escHtml(unfilled.join(', '))}">⚠ unfilled field${unfilled.length > 1 ? 's' : ''}</span>` : ''}
         <span class="status-pill ${it.status}">${it.status}</span>
         <span class="chevron" id="pv-ch-${idx}">▾</span>
       </div>
@@ -625,7 +671,8 @@ function renderPreview(items) {
         <div class="pv-label">Body</div>
         <textarea class="pv-body-ta" id="pv-body-${idx}" rows="7">${escHtml(it.body)}</textarea>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function togglePv(idx) {
@@ -664,6 +711,12 @@ async function startSend() {
     .filter(it => it.email);
 
   if (!items.length) { showAlert(qs('#global-msg'), 'error', 'No valid emails to send.'); return; }
+
+  const unfilledTotal = items.filter(it => detectUnfilled(it.subject + '\n' + it.body).length).length;
+  if (unfilledTotal > 0) {
+    const proceed = confirm(`${unfilledTotal} email${unfilledTotal > 1 ? 's' : ''} still ${unfilledTotal > 1 ? 'contain' : 'contains'} unfilled [bracket] fields (e.g. [Your Name]) — they'll be sent as literal text exactly like that. Send anyway?`);
+    if (!proceed) return;
+  }
 
   const btn = qs('#send-btn');
   btn.disabled = true; btn.textContent = 'Starting…';
