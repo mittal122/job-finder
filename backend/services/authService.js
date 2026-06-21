@@ -6,13 +6,20 @@ const config = require('../config');
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// A precomputed bcrypt hash of a random value, used only so verifyPassword
+// always does real comparison work even when there's no real hash to check
+// against. Without this, "no such user" / "Google-only account, no
+// password" both short-circuit before bcrypt.compare ever runs, while a
+// wrong password on a real account does run it — the timing difference
+// leaks which emails have an account.
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12);
+
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
 }
 
 async function verifyPassword(password, hash) {
-  if (!hash) return false;
-  return bcrypt.compare(password, hash);
+  return bcrypt.compare(password, hash || DUMMY_HASH);
 }
 
 // Session IDs are unguessable random tokens looked up server-side — no
@@ -28,12 +35,12 @@ async function createSession(userId) {
 async function validateSession(sessionId) {
   if (!sessionId) return null;
   const { rows } = await pool.query(
-    `SELECT s.user_id, u.email FROM sessions s
+    `SELECT s.user_id, u.email, u.is_admin FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.id = $1 AND s.expires_at > NOW()`,
     [sessionId]
   );
-  return rows[0] ? { id: rows[0].user_id, email: rows[0].email } : null;
+  return rows[0] ? { id: rows[0].user_id, email: rows[0].email, isAdmin: rows[0].is_admin } : null;
 }
 
 async function deleteSession(sessionId) {
@@ -53,10 +60,10 @@ function getGoogleClient() {
   );
 }
 
-function getGoogleAuthUrl() {
+function getGoogleAuthUrl(state) {
   const client = getGoogleClient();
   if (!client) return null;
-  return client.generateAuthUrl({ scope: ['email', 'profile'] });
+  return client.generateAuthUrl({ scope: ['email', 'profile'], state });
 }
 
 async function verifyGoogleCode(code) {

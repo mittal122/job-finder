@@ -37,7 +37,6 @@ A **Send Test Email** button on the Email Sending card lets you verify Gmail cre
 
 ## Remaining known gaps (tracked, not silently ignored)
 
-- `/api/logs` is gated behind login now, but not scoped per-tenant — see `docs/multi-tenancy.md`.
 - No password reset / email verification flow exists — would need a transactional email sender independent of any user's own Gmail credentials.
-- No roles/permissions — every account has identical capabilities.
+- No general roles/permissions — beyond the single admin boolean gating `/api/logs` (see `docs/authentication.md`), every account has identical capabilities.
 - Upgrading an existing pre-multi-user deployment does not automatically migrate old data to a new account — see `docs/multi-tenancy.md` for why and how to reach old data directly if needed.

@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-06-21 — Admin-gated console + login hardening
+
+A follow-up audit of the multi-user transformation below found one real cross-tenant leak and several login-flow weaknesses that a closer security read of the new auth code surfaced. All fixed and verified in a fully isolated environment before merging, per this project's established testing discipline.
+
+### Fixed
+- **`/api/logs` cross-tenant leak.** It was gated behind login, but any logged-in account could see the entire backend console — including other accounts' recipient emails and error details. Added a minimal `users.is_admin` boolean (migration `003_add_is_admin.sql`); the first account ever created becomes admin automatically, and `requireAdmin` now gates both `/api/logs` routes (`403` for non-admins). `frontend/js/layout.js` hides the "Console" sidebar link for non-admins, and `logs.html` shows a clear "Admins only" message instead of silently retrying a `403` SSE connection forever.
+- **Login timing attack.** A login attempt for a non-existent email returned faster than one for a real email with a wrong password, because `bcrypt.compare` only ran in the second case — an attacker could use the timing difference to enumerate which emails have accounts. `verifyPassword` now always runs a real comparison, against a precomputed dummy hash when there's no real one to check.
+- **Session cookie's `Secure` flag never activated.** It was gated on `NODE_ENV=production`, which nothing in this project's Docker setup ever sets — meaning the flag would have silently never turned on even behind a real HTTPS reverse proxy. Now derived from whether `PUBLIC_BASE_URL` starts with `https://`.
+- **Auth routes leaked raw internal error messages** on unexpected failures (e.g., a database error) directly to the client, bypassing the centralized error handler every other route already relies on. Now passed to `next(err)` like everywhere else — logged in full server-side, returned to the client as a generic `Internal server error`.
+- **No CSRF protection on the Google OAuth flow.** Added the standard mitigation: a random `state` value set in a short-lived cookie on `/api/auth/google`, checked again on `/api/auth/google/callback`.
+- Email input is now trimmed (not just lowercased) on signup/login, and password length is capped at 128 characters.
+
 ## 2026-06-21 — Multi-user SaaS platform
 
 The project's single biggest architectural gap — no concept of "a user" anywhere — is closed. Every account is now a fully isolated tenant: own profile, own Gmail credentials, own AI key, own campaigns, own history, own suppression list. See `docs/authentication.md` and `docs/multi-tenancy.md` for the full picture; this entry summarizes what changed and how it was verified.

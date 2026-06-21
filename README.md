@@ -37,7 +37,7 @@ See [CLAUDE.md](CLAUDE.md) for a guided tour of how the request/email flow actua
 
 ## Status
 
-This project is in active, structured development — see [docs/refactoring-roadmap.md](docs/refactoring-roadmap.md) for what's done and what's next, and [CHANGELOG.md](CHANGELOG.md) for what's shipped. Authentication and full multi-tenant data isolation are done (see [docs/authentication.md](docs/authentication.md) and [docs/multi-tenancy.md](docs/multi-tenancy.md)). Known, deliberately deferred gaps: no roles/permissions yet (every account has identical capabilities — see the `/api/logs` note in `docs/multi-tenancy.md`), Bulk Send/Template Map sessions are still in-memory only (not durable across a restart), and no password-reset flow exists yet.
+This project is in active, structured development — see [docs/refactoring-roadmap.md](docs/refactoring-roadmap.md) for what's done and what's next, and [CHANGELOG.md](CHANGELOG.md) for what's shipped. Authentication and full multi-tenant data isolation are done (see [docs/authentication.md](docs/authentication.md) and [docs/multi-tenancy.md](docs/multi-tenancy.md)). Known, deliberately deferred gaps: no general roles/permissions beyond a single admin boolean gating the backend console, Bulk Send/Template Map sessions are still in-memory only (not durable across a restart), and no password-reset flow exists yet.
 
 ## License
 

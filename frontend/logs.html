@@ -265,7 +265,14 @@ function connect() {
   };
 }
 
-connect();
+// This page streams every account's backend activity, not just yours —
+// confirm admin access first instead of silently retrying a 403 forever
+// (EventSource gives no way to read the response status from onerror).
+api.getMe().then(me => {
+  if (me.isAdmin) { connect(); return; }
+  setStatus('error', 'Admins only');
+  emptyMsg.textContent = 'This page is restricted to the admin account.';
+}).catch(() => {});
 </script>
 </body>
 </html>

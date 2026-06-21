@@ -62,6 +62,10 @@ function buildLayout(pageTitle) {
   api.getMe().then(me => {
     const el = document.getElementById('sidebar-user-email');
     if (el) el.textContent = me.email;
+    // Console streams the entire backend's log output, not scoped per
+    // tenant — only the admin account (the first one ever created) gets
+    // a link to it.
+    if (!me.isAdmin) document.querySelector('a[href="/logs.html"]')?.remove();
   }).catch(() => {});
 
   document.getElementById('sidebar-logout')?.addEventListener('click', async (e) => {

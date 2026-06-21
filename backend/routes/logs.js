@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { addClient, removeClient, getBuffer } = require('../services/logger');
+const { requireAdmin } = require('../middleware/requireAuth');
+
+// Admin-only: this is a single global backend console, not scoped per
+// tenant — any logged-in account would otherwise see every other
+// account's recipient emails and error details in the log lines.
+router.use(requireAdmin);
 
 // GET /api/logs — last N entries as JSON
 router.get('/', (req, res) => {

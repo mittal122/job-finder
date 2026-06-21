@@ -21,7 +21,7 @@ Every route that touches user-owned data filters by `req.user.id` (attached by `
 
 - **Bulk Send/Template Map's in-memory sessions** (`backend/routes/bulk.js`) aren't database rows, so they can't rely on a SQL `WHERE` clause. Each session object stores `userId` at creation time, and `/stop/:sessionId` and `/progress/:sessionId` both check `session.userId === req.user.id` before allowing access — returning `404` (not `403`) for both "doesn't exist" and "belongs to someone else," so a session ID never reveals whether it belongs to another account.
 - **Unsubscribe tokens** are signed over `(userId, email)` together, not just `email` (`backend/services/suppressionService.js`). A token generated for one account's send cannot be replayed to suppress an address under a different account.
-- **`/api/logs`** is now gated behind `requireAuth` (a real improvement over its previous fully-public state), but it is *not* per-tenant scoped — it streams the same global backend console to any logged-in account, which could include another tenant's recipient emails or error details appearing in log lines. Building proper per-tenant log scoping (or restricting the page to an admin role) requires a roles/permissions system that doesn't exist yet — this is a known, deliberately deferred gap, not an oversight. Worth fixing before this app has tenants who don't already trust each other.
+- **`/api/logs`** is gated behind a minimal admin check (`requireAdmin`, see `docs/authentication.md`), not just `requireAuth` — it streams a single global backend console, so any logged-in account seeing it would mean seeing other tenants' recipient emails and error details. The first account ever created becomes admin automatically and is the only one with a "Console" link in the sidebar or access to the route; everyone else gets `403`. This is intentionally the *only* role distinction in the app — not a general roles/permissions system — introduced solely to close this one leak.
 
 ## Secrets at rest
 
@@ -41,7 +41,7 @@ This was a deliberate choice, not a limitation worth working around: it keeps th
 
 This phase delivers complete data isolation between independent accounts — the core requirement for "more than one person can use this app without seeing each other's data." It deliberately does **not** include:
 - **Teams/organizations** — every account is a standalone tenant; there's no concept of multiple people sharing one workspace.
-- **Roles/permissions** — every account has identical capabilities; there's no "admin" distinct from a regular user (see the `/api/logs` note above for where this gap is most visible).
+- **General roles/permissions** — beyond the single `is_admin` boolean gating `/api/logs` (see above), every account has identical capabilities.
 - **Usage limits/billing** — nothing currently stops one account from sending as much as their own Gmail account allows.
 
 The schema doesn't block adding any of these later (a `teams` table, a `role` column, a `usage_limits` table would all layer on without restructuring what exists), but none of them are built — consistent with the project's roadmap, which scoped this phase to data isolation specifically and left those as separate future work.

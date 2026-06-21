@@ -10,4 +10,12 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, SESSION_COOKIE };
+// Must run after requireAuth (needs req.user already set). Kept separate
+// rather than folded into requireAuth so routes that don't need admin
+// access aren't affected.
+function requireAdmin(req, res, next) {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admins only.' });
+  next();
+}
+
+module.exports = { requireAuth, requireAdmin, SESSION_COOKIE };

@@ -2,7 +2,7 @@
 
 Findings are ranked by severity given the product's *intended* future (multi-user SaaS), not just its current single-operator deployment — several "low risk today" items become "critical" the moment this is exposed beyond one trusted person on localhost.
 
-> **Status update:** As of the multi-user transformation (see `CHANGELOG.md`), findings #1, #2, #3, #6, #7 (partially), #8, #9, and #10 are fixed. #4 is partially fixed (auth-gated, not yet tenant-scoped). #5 is fully resolved. The original findings are left as-written below for historical context (this audit is a point-in-time document); treat the CHANGELOG and `docs/multi-tenancy.md`/`docs/authentication.md` as the current source of truth.
+> **Status update:** As of the multi-user transformation and the admin-role/login-hardening follow-up (see `CHANGELOG.md`), findings #1, #2, #3, #4, #5, #6, #7 (partially), #8, #9, and #10 are all fixed. The original findings are left as-written below for historical context (this audit is a point-in-time document); treat the CHANGELOG and `docs/multi-tenancy.md`/`docs/authentication.md` as the current source of truth.
 
 ## Severity ranking
 
@@ -11,7 +11,7 @@ Findings are ranked by severity given the product's *intended* future (multi-use
 | 1 | No authentication/authorization anywhere | Low (single operator) | **Critical** | **Fixed** — accounts, sessions, every route scoped by `user_id`. See `docs/authentication.md`/`docs/multi-tenancy.md` |
 | 2 | SQL injection shape in `upload.js` | Medium | **Critical** | **Fixed** — parameterized query |
 | 3 | Unrestricted CORS + no auth = CSRF-equivalent | Low | **High** | **Fixed** — CORS restricted to the app's own origin now that there are real sessions/cookies to protect |
-| 4 | Unauthenticated console-log SSE stream | Low | **High** | **Partially fixed** — now behind `requireAuth` (any logged-in account, not the public internet), but still not scoped per-tenant; could leak another account's recipient emails/errors in log lines. Needs a roles system to fully close — see `docs/multi-tenancy.md` |
+| 4 | Unauthenticated console-log SSE stream | Low | **High** | **Fixed** — gated behind a minimal admin-only check (`requireAdmin`); only the first account ever created can reach it, everyone else gets `403`. See `docs/authentication.md` |
 | 5 | NVIDIA API key dual-source-of-truth, masked-not-hashed | Low | Medium | **Fixed** — dual-source-of-truth bug fixed in the zero-manual-config phase; now also encrypted at rest (AES-256-GCM) per #10 |
 | 6 | No file-type/content validation on uploads | Low | Medium | **Fixed** — magic-byte checks on Excel/resume uploads |
 | 7 | `xlsx` (SheetJS) 0.18.5 — check against known CVEs | Low–Medium | Medium | nodemailer/uuid CVEs **fixed**; xlsx itself still has no fix available upstream |
