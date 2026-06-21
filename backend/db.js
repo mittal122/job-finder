@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const config = require('./config');
+const { runMigrations } = require('./db/migrate');
 
 const pool = new Pool({ connectionString: config.databaseUrl });
 
@@ -101,37 +102,44 @@ CREATE TABLE IF NOT EXISTS suppressions (
 );
 `;
 
-// One-time seed from an env var, only if the setting has no value yet.
-// Lets .env act as a convenience for first boot / headless deployments
-// without ever clobbering a value the user has since configured through
-// the Settings page — unlike a previous version of this function, which
-// unconditionally overwrote the DB value from env on every single boot.
-async function seedSettingIfEmpty(key, envValue) {
-  if (!envValue) return;
-  const { rows } = await pool.query('SELECT value FROM app_settings WHERE key=$1', [key]);
+// One-time seed of a global (not per-user) app_config value, only if it
+// has no value yet — never clobbers a value already set.
+async function seedAppConfigIfEmpty(key, value) {
+  if (!value) return;
+  const { rows } = await pool.query('SELECT value FROM app_config WHERE key=$1', [key]);
   if (rows.length && rows[0].value) return;
   await pool.query(
-    `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+    `INSERT INTO app_config (key, value) VALUES ($1, $2)
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-    [key, envValue]
+    [key, value]
   );
 }
 
 async function initDb() {
-  await pool.query(SCHEMA_SQL);
-  // Migrate old gemini key → nvidia key if present
-  await pool.query(`UPDATE app_settings SET key='nvidia_api_key' WHERE key='gemini_api_key'`);
+  // Baseline single-tenant schema — only runs before the multi-tenant
+  // migrations have ever applied. It must NOT run again afterward: once
+  // migration 002 renames e.g. candidate_profiles to
+  // candidate_profiles_legacy and creates a new candidate_profiles with a
+  // different shape (user_id instead of id), re-running this idempotent
+  // "CREATE TABLE IF NOT EXISTS candidate_profiles (id SERIAL ...)" would
+  // see a table already named candidate_profiles and skip creation, but
+  // its INSERT...(id)... seed statement would still fire against the new
+  // table's actual (incompatible) columns and fail. Gating on whether
+  // `users` exists (created by migration 001, never touched again) is a
+  // reliable proxy for "have the multi-tenant migrations already run."
+  const { rows } = await pool.query(`
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'users'
+  `);
+  if (!rows.length) {
+    await pool.query(SCHEMA_SQL);
+  }
 
-  await seedSettingIfEmpty('nvidia_api_key',     process.env.NVIDIA_API_KEY);
-  await seedSettingIfEmpty('gmail_address',      process.env.GMAIL_ADDRESS);
-  await seedSettingIfEmpty('gmail_app_password', process.env.GMAIL_APP_PASSWORD);
-  await seedSettingIfEmpty('email_delay_min',    process.env.EMAIL_DELAY_MIN);
-  await seedSettingIfEmpty('email_delay_max',    process.env.EMAIL_DELAY_MAX);
+  await runMigrations(pool);
 
-  // Auto-generate a signing secret for unsubscribe links — never asked of
+  // Auto-generate the unsubscribe-link signing secret — never asked of
   // the user, generated once and persisted, exactly the kind of thing
   // that should never require manual configuration.
-  await seedSettingIfEmpty('unsubscribe_secret', crypto.randomBytes(32).toString('hex'));
+  await seedAppConfigIfEmpty('unsubscribe_secret', crypto.randomBytes(32).toString('hex'));
 
   console.log('Database schema ready.');
 }
