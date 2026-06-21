@@ -66,6 +66,8 @@ Every phase below ends in one or more commits, following these rules (restated h
 
 ## Phase 2 — Centralized configuration + Setup Wizard
 
+> **Status: done**, shipped as the "Zero Manual Code Changes" phase (see `CHANGELOG.md`) — though delivered as Gmail/AI-key/delay settings becoming configurable from `/settings.html` with fail-fast validation and a Dashboard "Getting Started" checklist, rather than a separate dedicated wizard flow. Since then, the multi-user transformation (Phase 3) made these settings per-account rather than app-wide, so task 1's `GMAIL_ADDRESS`/`GMAIL_APP_PASSWORD` env vars below no longer exist at all — see `docs/manual-configurations.md` for current reality.
+
 **Objective:** Realize the project's core stated vision — clone, run, configure everything from the UI, never touch source.
 
 **Tasks:**
@@ -83,6 +85,8 @@ Every phase below ends in one or more commits, following these rules (restated h
 ---
 
 ## Phase 3 — Authentication & authorization foundation
+
+> **Status: done.** See `docs/authentication.md` and `docs/multi-tenancy.md` for the full design, and `CHANGELOG.md`'s "Multi-user SaaS platform" entry for what shipped and how it was verified. One deviation from the plan below: rather than a single short-lived feature branch, this was built as a sequence of small, independently-verified commits directly on `main` — each milestone tested first in a fully isolated, disposable Docker environment (simulated pre-existing data included) before the corresponding code was committed, with the real running instance never touched until every piece was ready. This achieved the same goal (never leave `main` in a half-migrated state) without the branch.
 
 **Objective:** Close the single largest gap between "works for one trusted person" and "production-grade SaaS" (security-audit.md #1).
 

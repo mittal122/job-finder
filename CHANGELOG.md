@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-06-21 — Multi-user SaaS platform
+
+The project's single biggest architectural gap — no concept of "a user" anywhere — is closed. Every account is now a fully isolated tenant: own profile, own Gmail credentials, own AI key, own campaigns, own history, own suppression list. See `docs/authentication.md` and `docs/multi-tenancy.md` for the full picture; this entry summarizes what changed and how it was verified.
+
+### Added
+- **Accounts.** Email+password signup/login (bcrypt-hashed) and optional "Sign in with Google" (`google-auth-library`, entirely optional infrastructure — email+password works standalone if `GOOGLE_CLIENT_ID`/`SECRET` aren't set). New `frontend/login.html`/`signup.html`.
+- **Server-side sessions**, not JWT — a `sessions` table keyed by a random 64-character ID in an httpOnly/`SameSite=Lax` cookie. Chosen specifically so logout is a real, immediate revocation (`DELETE FROM sessions`), not just a client-side cookie clear. `requireAuth` middleware gates every route except `/api/auth/*`, `/api/unsubscribe`, and `/api/health`.
+- **Complete data isolation.** Every table that used to hold one implicit operator's data (`candidate_profiles`, `campaigns`, `email_logs`, `app_settings`, `mapping_configs`, `send_history`, `suppressions`) now has `user_id NOT NULL`, and every route scopes every query by it. Bulk Send/Template Map's in-memory sessions (not DB rows) store `userId` and check it on `/stop` and `/progress`, returning `404` for both "doesn't exist" and "belongs to someone else."
+- **Encryption at rest.** Gmail App Passwords and AI API keys are now AES-256-GCM encrypted in the database (`backend/utils/crypto.js`), keyed by a new required `ENCRYPTION_KEY` env var — the app fails fast at boot if it's missing.
+- **A minimal migration runner** (`backend/db/migrate.js`, numbered `.sql` files, a `schema_migrations` tracking table) — introduced specifically because the multi-tenant schema change (rename existing tables, create new ones) is a one-way, sequenced operation that doesn't fit the existing idempotent-`CREATE TABLE IF NOT EXISTS` pattern.
+- **Per-user unsubscribe tokens** — signed over `(userId, email)` together instead of just `email`, so suppression is correctly per-sender (one account's recipient unsubscribing never affects another account's ability to email that address) and a token can't be replayed across accounts.
+- **CORS restricted** to the app's own configured origin (previously wide open — harmless with no sessions to protect, a real gap with real cookies now) and a dedicated, tighter rate limit on `/api/auth/login`/`signup`.
+
+### Changed
+- **Migration strategy for existing deployments: start fresh, by design.** Every existing single-tenant table is renamed to a `_legacy` suffix — untouched, nothing deleted — and fresh `user_id`-scoped tables are created. There is no automatic "claim my old data" flow; sign up for a new account and your old data remains reachable only via direct database access. This was a deliberate choice (confirmed explicitly before implementation) over either auto-creating an account with a generated password or attempting a nullable-`user_id` in-place migration, both of which would have either been less safe or permanently complicated every future query with legacy-row edge cases.
+- `/api/logs` is now behind `requireAuth` (previously fully public) — a real improvement, though it's not yet per-tenant scoped (documented as a known gap requiring a future roles system).
+
+### Verified
+Every milestone was built and verified in a fully isolated environment (separate Docker project/ports/volumes) before any change touched the real running instance, continuing this project's established testing discipline:
+- The multi-tenant migration was tested against simulated pre-existing data (not just a fresh database), confirming legacy data survives byte-for-byte and the same migration is idempotent across restarts. This caught a real bug before it ever reached production: the old baseline schema script's leftover seed `INSERT` would otherwise have failed on every restart once `candidate_profiles` had been renamed out from under it.
+- Two real accounts (created via curl and, separately, via the actual browser UI) were used to confirm zero cross-account visibility across every feature — profile, campaigns, settings (including that each account's encrypted Gmail credentials decrypt independently), mapping configs, bulk-send session control, history, and unsubscribe tokens.
+- All attempted test sends used fake Gmail credentials, confirmed via the real `BadCredentials` rejection from Google in each case — no real email was sent during any part of this verification.
+- The full browser auth flow (signup → dashboard → settings save → logout → session genuinely invalidated server-side → login again → wrong-password error) was driven end-to-end with zero console errors.
+
+### Known, deliberately out of scope
+- No password reset / email verification flow — would need a transactional email sender independent of any user's own Gmail credentials.
+- No roles/permissions/teams — every account has identical capabilities today; the schema doesn't block adding these later.
+- Bulk Send/Template Map sessions remain in-memory only, not durable across a restart — unrelated to multi-tenancy, already tracked in `docs/refactoring-roadmap.md`.
+
 ## 2026-06-20 — Transform into a professional SaaS product
 
 A professional-polish and reliability/security-hardening pass within the app's existing single-operator architecture. Authentication and multi-tenancy remain deliberately out of scope here — they're large, multi-session structural changes the project's own roadmap already sequences into dedicated later phases, and attempting them incompletely in this pass would risk leaving the project partially working, which this phase's brief explicitly ruled out.

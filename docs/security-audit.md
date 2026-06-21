@@ -2,22 +2,22 @@
 
 Findings are ranked by severity given the product's *intended* future (multi-user SaaS), not just its current single-operator deployment — several "low risk today" items become "critical" the moment this is exposed beyond one trusted person on localhost.
 
-> **Status update:** Findings #2, #6, #7 (partially), #8, and #9 below have since been fixed — see `CHANGELOG.md`'s "Transform into a professional SaaS product" entry for what changed and how each fix was verified. The original findings are left as-written below for historical context (this audit is a point-in-time document); treat the CHANGELOG as the current source of truth on what's actually still open. #1, #3, #4, #5, and #10 remain open and unaddressed.
+> **Status update:** As of the multi-user transformation (see `CHANGELOG.md`), findings #1, #2, #3, #6, #7 (partially), #8, #9, and #10 are fixed. #4 is partially fixed (auth-gated, not yet tenant-scoped). #5 is fully resolved. The original findings are left as-written below for historical context (this audit is a point-in-time document); treat the CHANGELOG and `docs/multi-tenancy.md`/`docs/authentication.md` as the current source of truth.
 
 ## Severity ranking
 
 | # | Finding | Severity (today) | Severity (as SaaS) | Status |
 |---|---|---|---|---|
-| 1 | No authentication/authorization anywhere | Low (single operator) | **Critical** | Open — deliberately deferred, see `refactoring-roadmap.md` Phase 3 |
+| 1 | No authentication/authorization anywhere | Low (single operator) | **Critical** | **Fixed** — accounts, sessions, every route scoped by `user_id`. See `docs/authentication.md`/`docs/multi-tenancy.md` |
 | 2 | SQL injection shape in `upload.js` | Medium | **Critical** | **Fixed** — parameterized query |
-| 3 | Unrestricted CORS + no auth = CSRF-equivalent | Low | **High** | Open — depends on #1 |
-| 4 | Unauthenticated console-log SSE stream | Low | **High** | Open — depends on #1 |
-| 5 | NVIDIA API key dual-source-of-truth, masked-not-hashed | Low | Medium | Dual-source-of-truth bug fixed; still stored in plaintext (see #10) |
+| 3 | Unrestricted CORS + no auth = CSRF-equivalent | Low | **High** | **Fixed** — CORS restricted to the app's own origin now that there are real sessions/cookies to protect |
+| 4 | Unauthenticated console-log SSE stream | Low | **High** | **Partially fixed** — now behind `requireAuth` (any logged-in account, not the public internet), but still not scoped per-tenant; could leak another account's recipient emails/errors in log lines. Needs a roles system to fully close — see `docs/multi-tenancy.md` |
+| 5 | NVIDIA API key dual-source-of-truth, masked-not-hashed | Low | Medium | **Fixed** — dual-source-of-truth bug fixed in the zero-manual-config phase; now also encrypted at rest (AES-256-GCM) per #10 |
 | 6 | No file-type/content validation on uploads | Low | Medium | **Fixed** — magic-byte checks on Excel/resume uploads |
 | 7 | `xlsx` (SheetJS) 0.18.5 — check against known CVEs | Low–Medium | Medium | nodemailer/uuid CVEs **fixed**; xlsx itself still has no fix available upstream |
-| 8 | No rate limiting on any route | Low | High | **Fixed** — express-rate-limit on send/upload/generate endpoints |
-| 9 | No outbound email compliance (unsubscribe, suppression) | Medium (Gmail ToS / deliverability) | High (legal: CAN-SPAM/GDPR) | **Fixed** — signed unsubscribe links + suppression list on every send flow |
-| 10 | Secrets only in `.env`, no secret-manager integration | Low | Medium (multi-env deployments) | Open — `app_settings` secrets (Gmail password, NVIDIA key, unsubscribe signing secret) remain plaintext at rest |
+| 8 | No rate limiting on any route | Low | High | **Fixed** — express-rate-limit on send/upload/generate/auth endpoints |
+| 9 | No outbound email compliance (unsubscribe, suppression) | Medium (Gmail ToS / deliverability) | High (legal: CAN-SPAM/GDPR) | **Fixed** — signed, per-account unsubscribe links + suppression list on every send flow |
+| 10 | Secrets only in `.env`, no secret-manager integration | Low | Medium (multi-env deployments) | **Fixed** — `app_settings` secrets (Gmail password, NVIDIA key) now AES-256-GCM encrypted at rest, keyed by the required `ENCRYPTION_KEY` env var |
 
 ---
 
