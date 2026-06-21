@@ -6,6 +6,7 @@ const {
   isGoogleConfigured, getGoogleAuthUrl, verifyGoogleCode,
 } = require('../services/authService');
 const { requireAuth, SESSION_COOKIE } = require('../middleware/requireAuth');
+const { authLimiter } = require('../middleware/rateLimiter');
 
 const isProd = process.env.NODE_ENV === 'production';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,7 +28,7 @@ async function createProfileRow(userId) {
 }
 
 // POST /api/auth/signup
-router.post('/signup', async (req, res) => {
+router.post('/signup', authLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'A valid email is required.' });
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
@@ -53,7 +54,7 @@ router.post('/signup', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 

@@ -25,7 +25,13 @@ const { requireAuth } = require('./middleware/requireAuth');
 
 const app = express();
 
-app.use(cors());
+// The frontend is always served from this same Express app, so
+// same-origin requests (the only ones that matter) never need a CORS
+// allowance at all — browsers don't apply CORS to same-origin calls.
+// Restricting to the app's own configured public URL closes off the
+// previous wide-open cors() (which reflected Access-Control-Allow-Origin
+// for any origin) now that there are real sessions/cookies to protect.
+app.use(cors({ origin: config.publicBaseUrl, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
