@@ -3,6 +3,10 @@
 # and relies on a volume mount for the frontend).
 FROM node:20.18.1-alpine
 
+# Patch OS packages (openssl et al.) so the pinned base's stale libs don't
+# fail the trivy CRITICAL gate. --no-cache keeps the layer clean.
+RUN apk upgrade --no-cache
+
 # Backend runs from /app/backend; server.js serves ../frontend (=/app/frontend).
 WORKDIR /app/backend
 
